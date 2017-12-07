@@ -34,7 +34,7 @@ class MyNimiqApi extends NimiqNano{
 	}
 
 	onTransactionReceived(sender, value, fee){
-		console.log('transaction received from',sender, 'tx-value:',value,'fees payed',fees)
+		console.log('transaction received from',sender, 'tx-value:',value,'fees payed',fee)
 	}
 } 
 const nimiq = new MyNimiqApi();
