@@ -22,13 +22,14 @@
         }
 
         send() {
-            const recipient = document.getElementById('recipient');
-            const value = document.getElementById('value');
+            const $recipient = document.getElementById('recipient');
+            const $value = document.getElementById('value');
+            const value = Math.round($value.value * 10000000);
             const fee = 10;
-            this.sendTransaction(recipient.value, value.value, fee);
-            this.addToHistory(this.address, recipient.value, value.value, fee);
-            recipient.value = '';
-            value.value = '';
+            this.sendTransaction($recipient.value, value, fee);
+            this.addToHistory(this.address, $recipient.value, $value.value, fee);
+            $recipient.value = '';
+            $value.value = '';
         }
 
         addToHistory(sender, recipient, value, fee) {
@@ -53,7 +54,7 @@
         <button onclick="nimiq.send()">Send</button>
     </div>
     <div id="history">
-    	<h2>History</h2>
+        <h2>History</h2>
     </div>
     <style>
     body {
