@@ -20,3 +20,22 @@ A high-level API to the Nimiq nano client. This is intended to be the basis for 
 - `nimiq.onConsensusEstablished()`
 - `nimiq.onBalanceChanged(balance)`
 - `nimiq.onTransactionReceived(sender, value, fee)`
+
+Example event handler implementation:
+```
+class MyNimiqApi extends NimiqNano{
+
+	onConsensusEstablished(){
+		console.log('consensus established and API is ready to use')
+	}
+
+	onBalanceChanged(balance){
+		console.log('my new balance:', balance)
+	}
+
+	onTransactionReceived(sender, value, fee){
+		console.log('transaction received from',sender, 'tx-value:',value,'fees payed',fees)
+	}
+} 
+const nimiq = new MyNimiqApi();
+```  

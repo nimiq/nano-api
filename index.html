@@ -7,13 +7,60 @@
     <script src="https://cdn.nimiq.com/core/nimiq.js"></script>
     <script src="nano-api.js"></script>
     <script>
-    	const nimiq = new NimiqNano();
+    class MyNimiqApi extends NimiqNano {
+
+        onInitialized() {
+            document.getElementById('address').textContent = this.address
+        }
+
+        onBalanceChanged(balance) {
+            document.getElementById('balance').textContent = Math.round(balance / 1000000) / 100
+        }
+
+        onTransactionReceived(sender, value, fee) {
+            console.log('transaction received from', sender, 'tx-value:', value, 'fees payed', fees)
+        }
+
+        send() {
+            const recipient = document.getElementById('recipient');
+            const value = document.getElementById('value');
+            this.sendTransaction(recipient.value, value.value, 10);
+            recipient.value = ''
+            value.value = ''
+        }
+    }
+    const nimiq = new MyNimiqApi();
     </script>
 </head>
 
 <body>
     <h1>Most Simple Nimiq Wallet</h1>
-    <h2>Open Console to see output</h2>
+    <div>Address: <span id="address"></span></div>
+    <div>Balance: <span id="balance">-.--</span> NIM</div>
+    <div class="tx">
+    	<h2>Send Funds</h2>
+        <input type="text" id="recipient" placeholder="recipient">
+        <input type="number" id="value" placeholder="value">
+        <button onclick="nimiq.send()">Send</button>
+    </div>
+    <style>
+    	body{
+    		max-width: 640px;
+    		margin: 0 auto; 
+    	}
+ 
+    	input{
+    		display: block;
+    		padding: 8px;
+    		margin: 8px 0; 
+    	}
+    	#recipient{
+    		width: 300px;
+    	}
+    	button{
+    		padding: 8px 24px;
+    	}
+    </style>
 </body>
 
 </html>

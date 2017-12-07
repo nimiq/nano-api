@@ -12,6 +12,7 @@ class NimiqNano {
         $.consensus.blockchain.on('head-changed', e => this._headChanged());
         $.consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         this.$ = $;
+        this.onInitialized();
     }
 
     async _headChanged() {
@@ -48,8 +49,8 @@ class NimiqNano {
     */
     async sendTransaction(recipient, value, fee) {
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(recipient);
-        const account = await this._getAccount();
-        const tx = await this.$.wallet.createTransaction(recipientAddr, value, fee, account.nonce);
+        const nonce = (await this._getAccount()).nonce;
+        const tx = await this.$.wallet.createTransaction(recipientAddr, Number(value), Number(fee), nonce);
         return this.$.consensus.relayTransaction(tx);
     }
 
@@ -59,6 +60,10 @@ class NimiqNano {
 
     get balance() {
         return this._balance || 0;
+    }
+
+    onInitialized() {
+        console.log('API ready to use')
     }
 
     onConsensusEstablished() {
@@ -73,4 +78,3 @@ class NimiqNano {
         console.log('received:', value, 'from:', sender, 'txfee:', fee);
     }
 }
-
