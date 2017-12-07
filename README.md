@@ -4,7 +4,7 @@ A high-level API to the Nimiq nano client. This is intended to be the basis for 
 ### Setup
  - Import nimiq nano client: `<script src="https://cdn.nimiq.com/core/nimiq.js"></script>`
  - Import high-level API: `<script src="nano-api.js"></script>`
- - Create an Instance `const nimiq = new NimiqNano()`
+ - Create an Instance `const nimiq = new NanoApi()`
 
 ### My Address
 `nimiq.address` 
@@ -23,10 +23,14 @@ A high-level API to the Nimiq nano client. This is intended to be the basis for 
 
 Example event handler implementation:
 ```
-class MyNimiqApi extends NimiqNano{
+class MyNimiqApi extends NanoApi{
+	
+	onInitialized() {
+        console.log('Nimiq API to use')
+    }
 
 	onConsensusEstablished(){
-		console.log('consensus established and API is ready to use')
+		console.log('consensus established')
 	}
 
 	onBalanceChanged(balance){

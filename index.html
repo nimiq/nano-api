@@ -7,7 +7,7 @@
     <script src="https://cdn.nimiq.com/core/nimiq.js"></script>
     <script src="nano-api.js"></script>
     <script>
-    class MyNimiqApi extends NimiqNano {
+    class MyNimiqApi extends NanoApi {
 
         onInitialized() {
             document.getElementById('address').textContent = this.address
@@ -18,15 +18,24 @@
         }
 
         onTransactionReceived(sender, value, fee) {
-            console.log('transaction received from', sender, 'tx-value:', value, 'fees payed', fee)
+            this.addToHistory(sender, this.address, value, fee);
         }
 
         send() {
             const recipient = document.getElementById('recipient');
             const value = document.getElementById('value');
-            this.sendTransaction(recipient.value, value.value, 10);
-            recipient.value = ''
-            value.value = ''
+            const fee = 10;
+            this.sendTransaction(recipient.value, value.value, fee);
+            this.addToHistory(this.address, recipient.value, value.value, fee);
+            recipient.value = '';
+            value.value = '';
+        }
+
+        addToHistory(sender, recipient, value, fee) {
+            const history = document.getElementById('history');
+            const $tx = document.createElement('div');
+            $tx.textContent = `From: ${sender}\nTo:     ${recipient}\nValue: ${value}\nFee: ${fee}`;
+            history.appendChild($tx);
         }
     }
     const nimiq = new MyNimiqApi();
@@ -38,28 +47,39 @@
     <div>Address: <span id="address"></span></div>
     <div>Balance: <span id="balance">-.--</span> NIM</div>
     <div class="tx">
-    	<h2>Send Funds</h2>
+        <h2>Send Funds</h2>
         <input type="text" id="recipient" placeholder="recipient">
         <input type="number" id="value" placeholder="value">
         <button onclick="nimiq.send()">Send</button>
     </div>
+    <div id="history">
+    	<h2>History</h2>
+    </div>
     <style>
-    	body{
-    		max-width: 640px;
-    		margin: 0 auto; 
-    	}
- 
-    	input{
-    		display: block;
-    		padding: 8px;
-    		margin: 8px 0; 
-    	}
-    	#recipient{
-    		width: 300px;
-    	}
-    	button{
-    		padding: 8px 24px;
-    	}
+    body {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 16px;
+    }
+
+    input {
+        display: block;
+        padding: 8px;
+        margin: 8px 0;
+    }
+
+    #recipient {
+        width: 300px;
+    }
+
+    button {
+        padding: 8px 24px;
+    }
+
+    #history>div {
+        padding-bottom: 16px;
+        white-space: pre-wrap;
+    }
     </style>
 </body>
 

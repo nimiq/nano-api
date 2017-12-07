@@ -1,4 +1,4 @@
-class NimiqNano {
+class NanoApi {
     constructor() {
         Nimiq.init(() => this.init(), console.error);
     }
@@ -63,7 +63,7 @@ class NimiqNano {
     }
 
     onInitialized() {
-        console.log('API ready to use')
+        console.log('Nimiq API ready to use')
     }
 
     onConsensusEstablished() {
