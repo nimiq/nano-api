@@ -50,7 +50,9 @@ class NanoApi {
     async sendTransaction(recipient, value, fee) {
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(recipient);
         const nonce = (await this._getAccount()).nonce;
-        const tx = await this.$.wallet.createTransaction(recipientAddr, Number(value), Number(fee), nonce);
+        value = Math.round(Number(value) * 100000000);
+        fee = Number(fee);
+        const tx = await this.$.wallet.createTransaction(recipientAddr, value, fee, nonce);
         return this.$.consensus.relayTransaction(tx);
     }
 

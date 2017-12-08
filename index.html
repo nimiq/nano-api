@@ -24,7 +24,6 @@
         send() {
             const $recipient = document.getElementById('recipient');
             const $value = document.getElementById('value');
-            const value = Math.round($value.value * 10000000);
             const fee = 10;
             this.sendTransaction($recipient.value, value, fee);
             this.addToHistory(this.address, $recipient.value, $value.value, fee);
@@ -35,7 +34,7 @@
         addToHistory(sender, recipient, value, fee) {
             const history = document.getElementById('history');
             const $tx = document.createElement('div');
-            $tx.textContent = `From: ${sender}\nTo:     ${recipient}\nValue: ${value}\nFee: ${fee}`;
+            $tx.textContent = `From:\t${sender}\nTo:\t${recipient}\nValue: ${value}\nFee: ${fee}`;
             history.appendChild($tx);
         }
     }
