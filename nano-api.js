@@ -20,7 +20,7 @@ class NanoApi {
         const balance = await this._getBalance();
         if (this._balance === balance) return;
         this._balance = balance;
-        this.onBalanceChanged(balance);
+        this.onBalanceChanged(this.balance);
     }
 
     async _getAccount() {
@@ -61,7 +61,7 @@ class NanoApi {
     }
 
     get balance() {
-        return this._balance || 0;
+        return (this._balance / 100000000) || 0;
     }
 
     onInitialized() {
