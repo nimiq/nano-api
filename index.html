@@ -17,10 +17,6 @@
             document.getElementById('balance').textContent = Math.round(balance * 100) / 100
         }
 
-        onTransactionReceived(sender, value, fee) {
-            this.addToHistory(sender, this.address, value, fee);
-        }
-
         send() {
             const $recipient = document.getElementById('recipient');
             const $value = document.getElementById('value');
@@ -36,6 +32,10 @@
             const $tx = document.createElement('div');
             $tx.textContent = `From: ${sender}\nTo: ${recipient}\nValue: ${value}\nFee: ${fee}`;
             history.appendChild($tx);
+        }
+
+        onTransactionReceived(sender, value, fee) {
+            this.addToHistory(sender, this.address, value, fee);
         }
     }
     const nimiq = new MyNimiqApi();

@@ -1,4 +1,7 @@
 class NanoApi {
+
+    static get satoshis() { return 100000000 }
+
     constructor() {
         Nimiq.init(() => this.init(), console.error);
     }
@@ -23,14 +26,13 @@ class NanoApi {
         this.onBalanceChanged(this.balance);
     }
 
-    async _getAccount() {
-        const account = await this.$.consensus.getAccount(this.$.wallet.address);
-        return account.balance;
+    _getAccount() {
+        return this.$.consensus.getAccount(this.$.wallet.address);
     }
 
     async _getBalance() {
         const account = await this._getAccount();
-        return account.value;
+        return account.balance;
     }
 
     _onConsensusEstablished() {
@@ -39,9 +41,9 @@ class NanoApi {
     }
 
     async _transactionAdded(tx) {
-        if (!tx.recipientAddr.equals(this.$.wallet.address)) return;
-        const senderAddr = await tx.senderPubKey.toAddress();
-        this.onTransactionReceived(senderAddr.toUserFriendlyAddress(), tx.value, tx.fee);
+        if (!tx.recipient.equals(this.$.wallet.address)) return;
+        const sender = await tx.senderPubKey.toAddress();
+        this.onTransactionReceived(sender.toUserFriendlyAddress(), tx.value / NanoApi.satoshis, tx.fee);
     }
 
     /*
@@ -50,7 +52,7 @@ class NanoApi {
     async sendTransaction(recipient, value, fee) {
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(recipient);
         const nonce = (await this._getAccount()).nonce;
-        value = Math.round(Number(value) * 100000000);
+        value = Math.round(Number(value) * NanoApi.satoshis);
         fee = Number(fee);
         const tx = await this.$.wallet.createTransaction(recipientAddr, value, fee, nonce);
         return this.$.consensus.relayTransaction(tx);
@@ -61,7 +63,7 @@ class NanoApi {
     }
 
     get balance() {
-        return (this._balance / 100000000) || 0;
+        return (this._balance / NanoApi.satoshis) || 0;
     }
 
     onInitialized() {
