@@ -3,18 +3,17 @@ class NanoApi {
     static get satoshis() { return 100000000 }
 
     constructor() {
+        this.$ = {}
         Nimiq.init(() => this.init(), console.error);
     }
 
     async init() {
-        const $ = {};
-        $.consensus = await Nimiq.Consensus.nano();
-        $.wallet = await Nimiq.Wallet.getPersistent();
-        $.consensus.on('established', e => this._onConsensusEstablished());
-        $.consensus.network.connect();
-        $.consensus.blockchain.on('head-changed', e => this._headChanged());
-        $.consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
-        this.$ = $;
+        this.$.consensus = await Nimiq.Consensus.nano();
+        this.$.wallet = this.$wallet || await Nimiq.Wallet.getPersistent();
+        this.$.consensus.on('established', e => this._onConsensusEstablished());
+        this.$.consensus.network.connect();
+        this.$.consensus.blockchain.on('head-changed', e => this._headChanged());
+        this.$.consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         this.onInitialized();
     }
 
@@ -26,8 +25,9 @@ class NanoApi {
         this.onBalanceChanged(this.balance);
     }
 
-    _getAccount() {
-        return this.$.consensus.getAccount(this.$.wallet.address);
+    async _getAccount() {
+        const account = await this.$.consensus.getAccount(this.$.wallet.address);
+        return account || { balance: 0, nonce: 0 }
     }
 
     async _getBalance() {
@@ -66,6 +66,38 @@ class NanoApi {
         return (this._balance / NanoApi.satoshis) || 0;
     }
 
+    static validateAddress(address) {
+        try {
+            Nimiq.Address.fromUserFriendlyAddress(address);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async generateKeyPair() {
+        const keys = await Nimiq.KeyPair.generate();
+        const privKey = keys.privateKey.toHex();
+        const address = await keys.publicKey.toAddress();
+        return {
+            privateKey: privKey,
+            address: address.toUserFriendlyAddress()
+        }
+    }
+
+    async importKey(privateKey) {
+        privateKey = new Nimiq.PrivateKey(Nimiq.BufferUtils.fromHex(privateKey));
+        const keyPair = await Nimiq.KeyPair.derive(privateKey);
+        this.$.wallet = new Nimiq.Wallet(keyPair);
+        this.$.wallet.persist();
+        if (!this.$.consensus) return;
+        this._onConsensusEstablished();
+    }
+
+    exportKey() {
+        return nimiq.$.wallet.keyPair.privateKey.toHex();
+    }
+
     onInitialized() {
         console.log('Nimiq API ready to use')
     }
@@ -80,5 +112,15 @@ class NanoApi {
 
     onTransactionReceived(sender, value, fee) {
         console.log('received:', value, 'from:', sender, 'txfee:', fee);
+    }
+
+    encryptWallet(pin) {
+
+    }
+
+    decryptWallet(pin) {
+        return new Promise((resolve, error) => {
+            setTimeout(() => pin === '111111' ? resolve() : error(), 2000);
+        })
     }
 }
