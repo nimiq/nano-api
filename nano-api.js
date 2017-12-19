@@ -49,12 +49,12 @@ class NanoApi {
     /*
         Public API
     */
-    async sendTransaction(recipient, value, fee) {
+    async sendTransaction(recipient, value, fees = 0) {
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(recipient);
         const nonce = (await this._getAccount()).nonce;
         value = Math.round(Number(value) * NanoApi.satoshis);
-        fee = Number(fee);
-        const tx = await this.$.wallet.createTransaction(recipientAddr, value, fee, nonce);
+        fees = Math.round(Number(fees) * NanoApi.satoshis);
+        const tx = await this.$.wallet.createTransaction(recipientAddr, value, fees, nonce);
         return this.$.consensus.relayTransaction(tx);
     }
 
@@ -89,7 +89,7 @@ class NanoApi {
         privateKey = new Nimiq.PrivateKey(Nimiq.BufferUtils.fromHex(privateKey));
         const keyPair = await Nimiq.KeyPair.derive(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
-        this.$.wallet.persist();
+        await this.$.wallet.persist();
         if (!this.$.consensus) return;
         this._onConsensusEstablished();
     }
