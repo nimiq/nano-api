@@ -13,8 +13,8 @@ A high-level API to the Nimiq nano client. This is intended to be the basis for 
 `nimiq.balance` 
 
 ### Send Funds
-- API `nimiq.sendTransaction(recipient, value, fee)` 
-- Example: `nimiq.sendTransaction('NQ50 XXYT 3JT3 LGMQ B3QQ VH7E HXPY 534Q JVR8', 100000000, 1000)` 
+- API `nimiq.sendTransaction(recipient, value, fee)` (`value` and `fee` in `NIM`)
+- Example: `nimiq.sendTransaction('NQ50 XXYT 3JT3 LGMQ B3QQ VH7E HXPY 534Q JVR8', 10.2, 0.001)` 
 
 ### Events
 - `nimiq.onConsensusEstablished()`
@@ -26,7 +26,7 @@ Example event handler implementation:
 class MyNimiqApi extends NanoApi{
 	
 	onInitialized() {
-        console.log('Nimiq API to use')
+        console.log('Nimiq API ready to use')
     }
 
 	onConsensusEstablished(){

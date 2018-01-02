@@ -115,11 +115,12 @@ class NanoApi {
     }
 
     encryptWallet(pin) {
-
+        //TODO
     }
 
     decryptWallet(pin) {
         return new Promise((resolve, error) => {
+            // Dummy implementation
             setTimeout(() => pin === '111111' ? resolve() : error(), 2000);
         })
     }
