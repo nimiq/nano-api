@@ -114,14 +114,25 @@ class NanoApi {
         console.log('received:', value, 'from:', sender, 'txfee:', fee);
     }
 
-    encryptWallet(pin) {
+    lock(pin) {
         //TODO
+        return new Promise();
     }
 
-    decryptWallet(pin) {
+    unlock(pin) {
         return new Promise((resolve, error) => {
             // Dummy implementation
             setTimeout(() => pin === '111111' ? resolve() : error(), 2000);
         })
+    }
+
+    import (encryptedKey, pin) {
+        //TODO
+        return new Promise();
+    }
+
+    export (pin) {
+        // unlock wallet
+        return Promise.resolve('<<encrypted key>>')
     }
 }
