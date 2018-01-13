@@ -8,8 +8,9 @@ class NanoApi {
     }
 
     async init() {
-        this.$.consensus = await Nimiq.Consensus.nano();
         this.$.wallet = this.$wallet || await Nimiq.Wallet.getPersistent();
+        this.onAddressChanged(this.address);
+        this.$.consensus = await Nimiq.Consensus.nano();
         this.$.consensus.on('established', e => this._onConsensusEstablished());
         this.$.consensus.network.connect();
         this.$.consensus.blockchain.on('head-changed', e => this._headChanged());
@@ -98,6 +99,10 @@ class NanoApi {
         return nimiq.$.wallet.keyPair.privateKey.toHex();
     }
 
+    onAddressChanged(address) {
+        console.log('address changed')
+    }
+
     onInitialized() {
         console.log('Nimiq API ready to use')
     }
@@ -126,12 +131,12 @@ class NanoApi {
         })
     }
 
-    importWallet (encryptedKey, pin) {
+    importWallet(encryptedKey, pin) {
         //TODO
         return Promise.resolve()
     }
 
-    exportWallet (pin) {
+    exportWallet(pin) {
         // unlock wallet
         return Promise.resolve('<<encrypted key>>')
     }
