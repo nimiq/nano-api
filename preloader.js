@@ -12,3 +12,4 @@ class Preloader {
         })
     }
 }
+Preloader.isFirstVisit().then(isFirstVisit => location = isFirstVisit ? '#welcome' : '#locked');

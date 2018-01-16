@@ -2,14 +2,19 @@ class NanoApi {
 
     static get satoshis() { return 100000000 }
 
-    constructor() {
+    constructor(connect = false) {
         this.$ = {}
-        Nimiq.init(() => this.init(), console.error);
+        Nimiq.init((connect) => this.init(), console.error);
     }
 
-    async init() {
+    async init(connect) {
         this.$.wallet = this.$wallet || await Nimiq.Wallet.getPersistent();
         this.onAddressChanged(this.address);
+        if (connect) await this.connect();
+        this.onInitialized();
+    }
+
+    async connect() {
         this.$.consensus = await Nimiq.Consensus.nano();
         this.$.consensus.on('established', e => this._onConsensusEstablished());
         this.$.consensus.network.connect();
