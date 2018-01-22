@@ -4,11 +4,11 @@ export default class NanoApi {
 
     constructor(connect = false) {
         this.$ = {}
-        Nimiq.init((connect) => this.init(), console.error);
+        Nimiq.init($ => this.init(connect), console.error);
     }
 
     async init(connect) {
-        this.$.wallet = this.$wallet || await Nimiq.Wallet.getPersistent();
+        this.$.wallet = this.$.wallet || await Nimiq.Wallet.getPersistent();
         this.onAddressChanged(this.address);
         if (connect) await this.connect();
         this.onInitialized();
