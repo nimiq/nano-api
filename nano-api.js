@@ -1,4 +1,4 @@
-class NanoApi {
+export default class NanoApi {
 
     static get satoshis() { return 100000000 }
 
@@ -20,7 +20,6 @@ class NanoApi {
         this.$.consensus.network.connect();
         this.$.consensus.blockchain.on('head-changed', e => this._headChanged());
         this.$.consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
-        this.onInitialized();
     }
 
     async _headChanged() {
