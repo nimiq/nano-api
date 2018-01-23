@@ -95,8 +95,7 @@ export default class NanoApi {
         const keyPair = await Nimiq.KeyPair.derive(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
         await this.$.wallet.persist();
-        if (!this.$.consensus) return;
-        this._onConsensusEstablished();
+        this.onAddressChanged(this.address);
     }
 
     exportKey() {
