@@ -90,11 +90,10 @@ export default class NanoApi {
         }
     }
 
-    async importKey(privateKey) {
-        privateKey = new Nimiq.PrivateKey(Nimiq.BufferUtils.fromHex(privateKey));
-        const keyPair = await Nimiq.KeyPair.derive(privateKey);
+    async importKey(privateKey, persist = true) {
+        const keyPair = await Nimiq.KeyPair.fromHex(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
-        await this.$.wallet.persist();
+        if (persist) await this.$.wallet.persist();
         this.onAddressChanged(this.address);
     }
 
@@ -102,45 +101,31 @@ export default class NanoApi {
         return nimiq.$.wallet.keyPair.privateKey.toHex();
     }
 
-    onAddressChanged(address) {
-        console.log('address changed')
-    }
-
-    onInitialized() {
-        console.log('Nimiq API ready to use')
-    }
-
-    onConsensusEstablished() {
-        console.log('consensus established');
-    }
-
-    onBalanceChanged(balance) {
-        console.log('new balance:', balance);
-    }
-
-    onTransactionReceived(sender, value, fee) {
-        console.log('received:', value, 'from:', sender, 'txfee:', fee);
-    }
 
     lockWallet(pin) {
-        //TODO
-        return Promise.resolve()
+        return this.$.wallet.lock(pin);
     }
 
     unlockWallet(pin) {
-        return new Promise((resolve, error) => {
-            // Dummy implementation
-            setTimeout(() => pin === '111111' ? resolve() : error(), 2000);
-        })
+        return this.$.wallet.unlock(pin);
     }
 
-    importWallet(encryptedKey, pin) {
-        //TODO
-        return Promise.resolve()
+    async importEncrypted(encryptedKey, password) {
+        this.$.wallet = await Nimiq.Wallet.loadEncrypted(encryptedKey, password);
+        return this.$.wallet.persist();
     }
 
-    exportWallet(pin) {
-        // unlock wallet
-        return Promise.resolve('<<encrypted key>>')
+    exportEncrypted(password) {
+        return '//Todo:'; this.$.wallet.exportEncrypted(password);
     }
+
+    onAddressChanged(address) { console.log('address changed') }
+
+    onInitialized() { console.log('Nimiq API ready to use') }
+
+    onConsensusEstablished() { console.log('consensus established'); }
+
+    onBalanceChanged(balance) { console.log('new balance:', balance); }
+
+    onTransactionReceived(sender, value, fee) { console.log('received:', value, 'from:', sender, 'txfee:', fee); }
 }
