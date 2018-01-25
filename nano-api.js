@@ -4,7 +4,7 @@ export default class NanoApi {
 
     constructor(connect = false) {
         this.$ = {}
-        Nimiq.init($ => this.init(connect), console.error);
+        Nimiq.init($ => this.init(connect), e => this.onDifferentTabError(e));
     }
 
     async init(connect) {
@@ -122,6 +122,7 @@ export default class NanoApi {
 
     onTransactionReceived(sender, value, fee) { console.log('received:', value, 'from:', sender, 'txfee:', fee); }
 
+    onDifferentTabError(){ console.log('Nimiq API is already running in a different tab'); }
 
     static formatValue(number, decimals = 3) {
         number = Number(number)
