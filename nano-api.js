@@ -4,7 +4,7 @@ export default class NanoApi {
     static get satoshis() { return 100000000 }
 
     constructor(connect = false) {
-        console.warn('connect = false', connect = false)
+        // console.warn('connect = false', connect = false)
         this._init(connect)
     }
 
@@ -15,6 +15,7 @@ export default class NanoApi {
     }
 
     async _onApiReady(connect) {
+        await Nimiq.Crypto.prepareSyncCryptoWorker();
         this.$.walletStore = await new Nimiq.WalletStore();
         this.$.wallet = this.$.wallet || await this.$.walletStore.getDefault();
         this.onAddressChanged(this.address);
