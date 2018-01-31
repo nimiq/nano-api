@@ -1,6 +1,6 @@
 export default class NanoApi {
 
-    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
+    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/styppo-crypto-cleanup/nimiq.js' }
     static get satoshis() { return 100000000 }
 
     constructor(connect = false) {
@@ -15,7 +15,8 @@ export default class NanoApi {
     }
 
     async _onApiReady(connect) {
-        this.$.wallet = this.$.wallet || await Nimiq.Wallet.getPersistent();
+        this.$.walletStore = await new Nimiq.WalletStore();
+        this.$.wallet = this.$.wallet || await this.$.walletStore.getDefault();
         this.onAddressChanged(this.address);
         if (connect) await this.connect();
         this.onInitialized();
@@ -52,9 +53,9 @@ export default class NanoApi {
         this.onConsensusEstablished();
     }
 
-    async _transactionAdded(tx) {
+    _transactionAdded(tx) {
         if (!tx.recipient.equals(this.$.wallet.address)) return;
-        const sender = await tx.senderPubKey.toAddress();
+        const sender = tx.senderPubKey.toAddress();
         this.onTransactionReceived(sender.toUserFriendlyAddress(), tx.value / NanoApi.satoshis, tx.fee);
     }
 
@@ -63,10 +64,9 @@ export default class NanoApi {
     */
     async sendTransaction(recipient, value, fees = 0) {
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(recipient);
-        const nonce = (await this._getAccount()).nonce;
         value = Math.round(Number(value) * NanoApi.satoshis);
         fees = Math.round(Number(fees) * NanoApi.satoshis);
-        const tx = await this.$.wallet.createTransaction(recipientAddr, value, fees, nonce);
+        const tx = this.$.wallet.createTransaction(recipientAddr, value, fees, this.$.consensus.blockchain.height);
         return this.$.consensus.relayTransaction(tx);
     }
 
@@ -79,9 +79,9 @@ export default class NanoApi {
     }
 
     async generateKeyPair() {
-        const keys = await Nimiq.KeyPair.generate();
+        const keys = Nimiq.KeyPair.generate();
         const privKey = keys.privateKey.toHex();
-        const address = await keys.publicKey.toAddress();
+        const address = keys.publicKey.toAddress();
         return {
             privateKey: privKey,
             address: address.toUserFriendlyAddress()
@@ -89,14 +89,14 @@ export default class NanoApi {
     }
 
     async importKey(privateKey, persist = true) {
-        const keyPair = await Nimiq.KeyPair.fromHex(privateKey);
+        const keyPair = Nimiq.KeyPair.fromHex(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
-        if (persist) await this.$.wallet.persist();
+        if (persist) await this.$.walletStore.put(this.$.wallet);
         this.onAddressChanged(this.address);
     }
 
     exportKey() {
-        return nimiq.$.wallet.keyPair.privateKey.toHex();
+        return this.$.wallet.keyPair.privateKey.toHex();
     }
 
 
