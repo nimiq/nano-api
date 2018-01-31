@@ -1,13 +1,20 @@
 export default class NanoApi {
 
+    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
     static get satoshis() { return 100000000 }
 
     constructor(connect = false) {
-        this.$ = {}
-        Nimiq.init($ => this.init(connect), e => this.onDifferentTabError(e));
+        console.warn('connect = false', connect = false)
+        this._init(connect)
     }
 
-    async init(connect) {
+    async _init(connect) {
+        await NanoApi._importApi();
+        this.$ = {}
+        Nimiq.init($ => this._onApiReady(connect), e => this.onDifferentTabError(e));
+    }
+
+    async _onApiReady(connect) {
         this.$.wallet = this.$.wallet || await Nimiq.Wallet.getPersistent();
         this.onAddressChanged(this.address);
         if (connect) await this.connect();
@@ -122,7 +129,7 @@ export default class NanoApi {
 
     onTransactionReceived(sender, value, fee) { console.log('received:', value, 'from:', sender, 'txfee:', fee); }
 
-    onDifferentTabError(){ console.log('Nimiq API is already running in a different tab'); }
+    onDifferentTabError() { console.log('Nimiq API is already running in a different tab'); }
 
     static formatValue(number, decimals = 3) {
         number = Number(number)
@@ -171,5 +178,16 @@ export default class NanoApi {
         }
 
         return parseInt(tmp);
+    }
+
+    static _importApi() {
+        return new Promise((resolve, reject) => {
+            let script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = NanoApi.API_URL;
+            script.addEventListener('load', () => resolve(script), false);
+            script.addEventListener('error', () => reject(script), false);
+            document.body.appendChild(script);
+        });
     }
 }
