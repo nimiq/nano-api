@@ -1,6 +1,6 @@
 export default class NanoApi {
 
-    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/styppo-crypto-cleanup/nimiq.js' }
+    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
     static get satoshis() { return 100000000 }
 
     constructor(connect = false) {
@@ -81,7 +81,7 @@ export default class NanoApi {
 
     async generateKeyPair() {
         const keys = Nimiq.KeyPair.generate();
-        const privKey = keys.privateKey.toHex();
+        const privKey = keys.privateKey
         const address = keys.publicKey.toAddress();
         return {
             privateKey: privKey,
@@ -90,7 +90,7 @@ export default class NanoApi {
     }
 
     async importKey(privateKey, persist = true) {
-        const keyPair = Nimiq.KeyPair.fromHex(privateKey);
+        const keyPair = Nimiq.KeyPair.fromPrivateKey(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
         if (persist) await this.$.walletStore.put(this.$.wallet);
         this.onAddressChanged(this.address);
@@ -99,7 +99,6 @@ export default class NanoApi {
     exportKey() {
         return this.$.wallet.keyPair.privateKey.toHex();
     }
-
 
     lockWallet(pin) {
         return this.$.wallet.lock(pin);
@@ -114,10 +113,9 @@ export default class NanoApi {
         return this.$.wallet.persist();
     }
 
-
-    exportEncrypted(password) {
-        return '//Todo:';
-        this.$.wallet.exportEncrypted(password);
+    async exportEncrypted(password) {
+        const privateKey = await this.$.wallet.exportEncrypted(password);
+        return Nimiq.BufferUtils.toHex(privateKey);
     }
 
     onAddressChanged(address) { console.log('address changed') }
