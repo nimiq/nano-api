@@ -110,7 +110,8 @@ export default class NanoApi {
 
     async importEncrypted(encryptedKey, password) {
         this.$.wallet = await Nimiq.Wallet.loadEncrypted(encryptedKey, password);
-        return this.$.wallet.persist();
+        // this.$.walletStore = this.$.walletStore || await new Nimiq.WalletStore();
+        // this.$.walletStore.put(this.$.wallet);
     }
 
     async exportEncrypted(password) {
