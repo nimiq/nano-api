@@ -1,22 +1,22 @@
-# nano-api
+# Nano Api
 A high-level API to the Nimiq nano client. This is intended to be the basis for nimiq wallet applications. 
 
-### Setup
+## Setup
  - Import nimiq nano client: `<script src="https://cdn.nimiq.com/core/nimiq.js"></script>`
  - Import high-level API: `<script src="nano-api.js"></script>`
  - Create an Instance `const nimiq = new NanoApi()`
 
-### My Address
+## My Address
 `nimiq.address` 
 
-### My Balance
+## My Balance
 `nimiq.balance` 
 
-### Send Funds
+## Send Funds
 - API `nimiq.sendTransaction(recipient, value, fee)` (`value` and `fee` in `NIM`)
 - Example: `nimiq.sendTransaction('NQ50 XXYT 3JT3 LGMQ B3QQ VH7E HXPY 534Q JVR8', 10.2, 0.001)` 
 
-### Events
+## Events
 - `nimiq.onConsensusEstablished()`
 - `nimiq.onBalanceChanged(balance)`
 - `nimiq.onTransactionReceived(sender, value, fee)`
