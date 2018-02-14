@@ -144,8 +144,8 @@ export default class NanoApi {
 
     async exportEncrypted(password) {
         await this._apiInitialized;
-        const privateKey = await this.$.wallet.exportEncrypted(password);
-        return Nimiq.BufferUtils.toHex(privateKey);
+        const exportedWallet = await this.$.wallet.exportEncrypted(password);
+        return Nimiq.BufferUtils.toBase64(exportedWallet);
     }
 
     /** @param {string | Nimiq.Address} address
