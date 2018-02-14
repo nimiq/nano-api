@@ -3,27 +3,35 @@ export default class NanoApi {
     static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
     static get satoshis() { return 100000000 }
 
-    constructor(connect = false) {
-        // console.warn('connect = false', connect = false)
-        this._init(connect)
+    static getApi() {
+        this._api = this._api || new NanoApi();
+        return this._api;
+    }
+
+    constructor() {
+        this._apiInitialized = new Promise(resolve => {
+            this._resolveApiInitialized = resolve;
+            return 1;
+        });
+        this._init()
     }
 
     async _init(connect) {
         await NanoApi._importApi();
         this.$ = {}
-        Nimiq.init($ => this._onApiReady(connect), e => this.onDifferentTabError(e));
+        Nimiq.init($ => this._onApiReady(), e => this.onDifferentTabError(e));
     }
 
-    async _onApiReady(connect) {
+    async _onApiReady() {
         await Nimiq.Crypto.prepareSyncCryptoWorker();
         this.$.walletStore = await new Nimiq.WalletStore();
         this.$.wallet = this.$.wallet || await this.$.walletStore.getDefault();
         this.onAddressChanged(this.address);
-        if (connect) await this.connect();
         this.onInitialized();
     }
 
     async connect() {
+        await this._apiInitialized;
         this.$.consensus = await Nimiq.Consensus.nano();
         this.$.consensus.on('established', e => this._onConsensusEstablished());
         this.$.consensus.network.connect();
@@ -32,6 +40,7 @@ export default class NanoApi {
     }
 
     async _headChanged() {
+        await this._apiInitialized;
         if (!this.$.consensus.established) return;
         const balance = await this._getBalance();
         if (this._balance === balance) return;
@@ -40,11 +49,13 @@ export default class NanoApi {
     }
 
     async _getAccount() {
+        await this._apiInitialized;
         const account = await this.$.consensus.getAccount(this.$.wallet.address);
         return account || { balance: 0, nonce: 0 }
     }
 
     async _getBalance() {
+        await this._apiInitialized;
         const account = await this._getAccount();
         return account.balance;
     }
@@ -64,6 +75,7 @@ export default class NanoApi {
         Public API
     */
     async sendTransaction(recipient, value, fees = 0) {
+        await this._apiInitialized;
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(recipient);
         value = Math.round(Number(value) * NanoApi.satoshis);
         fees = Math.round(Number(fees) * NanoApi.satoshis);
@@ -71,6 +83,7 @@ export default class NanoApi {
         return this.$.consensus.relayTransaction(tx);
     }
 
+    // is it ok not to await _apiReady here?
     get address() {
         return this.$.wallet.address.toUserFriendlyAddress();
     }
@@ -80,6 +93,7 @@ export default class NanoApi {
     }
 
     async generateKeyPair() {
+        await this._apiInitialized;
         const keys = Nimiq.KeyPair.generate();
         const privKey = keys.privateKey
         const address = keys.publicKey.toAddress();
@@ -90,46 +104,72 @@ export default class NanoApi {
     }
 
     async importKey(privateKey, persist = true) {
+        await this._apiInitialized;
         const keyPair = Nimiq.KeyPair.fromPrivateKey(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
         if (persist) await this.$.walletStore.put(this.$.wallet);
-        this.onAddressChanged(this.address);
+        return this.address;
     }
 
-    exportKey() {
+    async exportKey() {
+        await this._apiInitialized;
         return this.$.wallet.keyPair.privateKey.toHex();
     }
 
-    lockWallet(pin) {
+    async lockWallet(pin) {
+        await this._apiInitialized;
         return this.$.wallet.lock(pin);
     }
 
-    unlockWallet(pin) {
+    async unlockWallet(pin) {
+        await this._apiInitialized;
         return this.$.wallet.unlock(pin);
     }
 
     async importEncrypted(encryptedKey, password) {
+        await this._apiInitialized;
         this.$.wallet = await Nimiq.Wallet.loadEncrypted(encryptedKey, password);
         // this.$.walletStore = this.$.walletStore || await new Nimiq.WalletStore();
         // this.$.walletStore.put(this.$.wallet);
     }
 
     async exportEncrypted(password) {
+        await this._apiInitialized;
         const privateKey = await this.$.wallet.exportEncrypted(password);
         return Nimiq.BufferUtils.toHex(privateKey);
     }
 
-    onAddressChanged(address) { console.log('address changed') }
+    onInitialized() {
+        this.initialized = true;
+        console.log('Nimiq API ready to use');
+        this._resolveApiInitialized();
+        this.fire('nimiq-api-ready');
+    }
 
-    onInitialized() { console.log('Nimiq API ready to use') }
+    onAddressChanged(address) {
+        console.log('address changed');
+        this.fire('nimiq-account', address);
+    }
 
-    onConsensusEstablished() { console.log('consensus established'); }
+    onConsensusEstablished() {
+        console.log('consensus established');
+        this.fire('nimiq-consensus-established', this.address);
+    }
 
-    onBalanceChanged(balance) { console.log('new balance:', balance); }
+    onBalanceChanged(balance) {
+        console.log('new balance:', balance);
+        this.fire('nimiq-balance', balance);
+    }
 
-    onTransactionReceived(sender, value, fee) { console.log('received:', value, 'from:', sender, 'txfee:', fee); }
+    onTransactionReceived(sender, value, fee) {
+        console.log('received:', value, 'from:', sender, 'txfee:', fee);
+        this.fire('nimiq-transaction', { sender: sender, value: value, fee: fee });
+    }
 
-    onDifferentTabError() { console.log('Nimiq API is already running in a different tab'); }
+    onDifferentTabError() {
+        console.log('Nimiq API is already running in a different tab');
+        this.fire('nimiq-different-tab-error');
+    }
 
     static formatValue(number, decimals = 3) {
         number = Number(number)
@@ -189,5 +229,11 @@ export default class NanoApi {
             script.addEventListener('error', () => reject(script), false);
             document.body.appendChild(script);
         });
+    }
+
+    // Copied from x-element.
+    fire(eventType, detail = null, bubbles = true) { // Fire DOM-Event
+        const params = { detail: detail, bubbles: bubbles };
+        window.dispatchEvent(new CustomEvent(eventType, params));
     }
 }
