@@ -137,6 +137,7 @@ export default class NanoApi {
 
     async importEncrypted(encryptedKey, password) {
         await this._apiInitialized;
+        encryptedKey = Nimiq.BufferUtils.fromBase64(encryptedKey);
         this.$.wallet = await Nimiq.Wallet.loadEncrypted(encryptedKey, password);
         // this.$.walletStore = this.$.walletStore || await new Nimiq.WalletStore();
         // this.$.walletStore.put(this.$.wallet);
