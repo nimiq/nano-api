@@ -83,7 +83,16 @@ export default class NanoApi {
         return this.$.consensus.relayTransaction(tx);
     }
 
-    // is it ok not to await _apiReady here?
+    async getAddress() {
+        await this._apiInitialized;
+        return this.address;
+    }
+
+    async getBalance() {
+        await this._apiInitialized;
+        return this.balance;
+    }
+
     get address() {
         return this.$.wallet.address.toUserFriendlyAddress();
     }
@@ -143,7 +152,7 @@ export default class NanoApi {
      * @return {Promise<string>} */
     async nim2ethAddress(address) {
         await this._apiInitialized;
-        const addressObj = (typeof address  === 'string') ? this.getUnfriendlyAddress(address) : address;
+        const addressObj = (typeof address  === 'string') ? await this.getUnfriendlyAddress(address) : address;
         const hash = await Nimiq.Hash.sha256(addressObj.serialize());
         return '0x' + Nimiq.BufferUtils.toHex(hash.subarray(0, 20));
     }
