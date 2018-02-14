@@ -139,8 +139,22 @@ export default class NanoApi {
         return Nimiq.BufferUtils.toHex(privateKey);
     }
 
+    /** @param {string | Nimiq.Address} address
+     * @return {Promise<string>} */
+    async nim2ethAddress(address) {
+        await this._apiInitialized;
+        const addressObj = (typeof address  === 'string') ? this.getUnfriendlyAddress(address) : address;
+        const hash = await Nimiq.Hash.sha256(addressObj.serialize());
+        return '0x' + Nimiq.BufferUtils.toHex(hash.subarray(0, 20));
+    }
+
+    /** @param {string} friendlyAddress */
+    async getUnfriendlyAddress(friendlyAddress) {
+        await this._apiInitialized;
+        return Nimiq.Address.fromUserFriendlyAddress(friendlyAddress);
+    }
+
     onInitialized() {
-        this.initialized = true;
         console.log('Nimiq API ready to use');
         this._resolveApiInitialized();
         this.fire('nimiq-api-ready');
