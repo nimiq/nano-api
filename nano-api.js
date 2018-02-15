@@ -257,9 +257,14 @@ export default class NanoApi {
         });
     }
 
+    setXElement(xElement) {
+       this._xElement = xElement;
+       this.fire = this._xElement.fire;
+    }
+
     // Copied from x-element.
     fire(eventType, detail = null, bubbles = true) { // Fire DOM-Event
         const params = { detail: detail, bubbles: bubbles };
-        window.dispatchEvent(new CustomEvent(eventType, params));
+        document.body.dispatchEvent(new CustomEvent(eventType, params));
     }
 }
