@@ -101,6 +101,12 @@ export default class NanoApi {
         return (this._balance / NanoApi.satoshis) || 0;
     }
 
+    /**
+     *
+     *
+     *
+     * @return {Object} An object containing `privateKey` in native format and `address` in user-friendly format.
+     */
     async generateKeyPair() {
         await this._apiInitialized;
         const keys = Nimiq.KeyPair.generate();
