@@ -9,17 +9,14 @@ export default class NanoApi {
     }
 
     constructor() {
-        this._apiInitialized = new Promise(resolve => {
-            this._resolveApiInitialized = resolve;
-            return 1;
+        this._apiInitialized = new Promise(async resolve => {
+            await NanoApi._importApi();
+            this.$ = {}
+            Nimiq.init(async $ => {
+                await this._onApiReady();
+                resolve();
+            }, e => this.onDifferentTabError(e));
         });
-        this._init()
-    }
-
-    async _init(connect) {
-        await NanoApi._importApi();
-        this.$ = {}
-        Nimiq.init($ => this._onApiReady(), e => this.onDifferentTabError(e));
     }
 
     async _onApiReady() {
@@ -172,7 +169,6 @@ export default class NanoApi {
 
     onInitialized() {
         console.log('Nimiq API ready to use');
-        this._resolveApiInitialized();
         this.fire('nimiq-api-ready');
     }
 
