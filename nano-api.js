@@ -17,11 +17,10 @@ export default class NanoApi {
                     await this._onApiReady();
                     resolve();
                 } catch(e) {
-                   reject();
+                    this.onInitializationError(e);
                 }
             }, e => {
                 this.onDifferentTabError(e);
-                reject();
             });
         });
     }
@@ -202,6 +201,11 @@ export default class NanoApi {
     onDifferentTabError() {
         console.log('Nimiq API is already running in a different tab');
         this.fire('nimiq-different-tab-error');
+    }
+
+    onInitializationError() {
+        console.log('Nimiq API could not be initialized.');
+        this.fire('nimiq-api-fail');
     }
 
     static formatValue(number, decimals = 3) {
