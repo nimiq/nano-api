@@ -225,7 +225,7 @@ export default class NanoApi {
         var whole = number[0];
         var decimals = number[1];
         var reversed = whole.split('').reverse();
-        for(i = 3; i < reversed.length; i += 4) {
+        for(var i = 3; i < reversed.length; i += 4) {
             reversed.splice(i, 0, separator);
         }
         return reversed.reverse().join('') + (decimals ? '.' + decimals : '');
