@@ -208,15 +208,27 @@ export default class NanoApi {
         this.fire('nimiq-api-fail');
     }
 
-    static formatValue(number, decimals = 3) {
+    static formatValue(number, decimals = 3, thousandsSeparator = '\'') {
         number = Number(number)
         decimals = Math.pow(10, decimals);
-        return Math.round(number * decimals) / decimals;
+        return this._formatThousands(Math.round(number * decimals) / decimals, thousandsSeparator);
     }
 
-    static formatValueInDollar(number) {
-        number = Number(number)
-        return this.formatValue(number * 17.1, 2);
+    // FIXME: formatValueInDollar() is in the wrong place and done wrong
+    // static formatValueInDollar(number) {
+    //     number = Number(number)
+    //     return this.formatValue(number * 0.05, 2);
+    // }
+
+    static _formatThousands(number, separator) {
+        number = number.toString().split('.');
+        var whole = number[0];
+        var decimals = number[1];
+        var reversed = whole.split('').reverse();
+        for(i = 3; i < reversed.length; i += 4) {
+            reversed.splice(i, 0, separator);
+        }
+        return reversed.reverse().join('') + (decimals ? '.' + decimals : '');
     }
 
     static validateAddress(address) {
