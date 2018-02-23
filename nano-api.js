@@ -17,6 +17,7 @@ export default class NanoApi {
                     await this._onApiReady();
                     resolve();
                 } catch(e) {
+                    console.error(e);
                     this.onInitializationError(e);
                 }
             }, e => {
@@ -123,6 +124,9 @@ export default class NanoApi {
 
     async importKey(privateKey, persist = true) {
         await this._apiInitialized;
+        if(typeof privateKey ===  "string") {
+            privateKey = Nimiq.PrivateKey.unserialize(Nimiq.BufferUtils.fromHex(privateKey));
+        }
         const keyPair = Nimiq.KeyPair.fromPrivateKey(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
         if (persist) await this.$.walletStore.put(this.$.wallet);
@@ -179,7 +183,7 @@ export default class NanoApi {
     }
 
     onAddressChanged(address) {
-        console.log('address changed');
+        console.log('address changed:', address);
         this.fire('nimiq-account', address);
     }
 
