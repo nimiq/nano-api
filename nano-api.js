@@ -28,10 +28,13 @@ export default class NanoApi {
 
     async _onApiReady() {
         await Nimiq.Crypto.prepareSyncCryptoWorker();
-        this.$.walletStore = await new Nimiq.WalletStore();
-        this.$.wallet = this.$.wallet || await this.$.walletStore.getDefault();
-        this.onAddressChanged(this.address);
         this.onInitialized();
+    }
+
+    async loadWallet() {
+        if(!this.$.walletStore) this.$.walletStore = await new Nimiq.WalletStore();
+        if(!this.$.wallet) this.$.wallet = await this.$.walletStore.getDefault();
+        this.onAddressChanged(this.address);
     }
 
     async connect() {
@@ -78,12 +81,12 @@ export default class NanoApi {
     /*
         Public API
     */
-    async sendTransaction(recipient, value, fees = 0) {
+    async sendTransaction(recipient, value, fee = 0) {
         await this._apiInitialized;
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(recipient);
         value = Math.round(Number(value) * NanoApi.satoshis);
-        fees = Math.round(Number(fees) * NanoApi.satoshis);
-        const tx = this.$.wallet.createTransaction(recipientAddr, value, fees, this.$.consensus.blockchain.height);
+        fee = Math.round(Number(fee) * NanoApi.satoshis);
+        const tx = this.$.wallet.createTransaction(recipientAddr, value, fee, this.$.consensus.blockchain.height);
         return this.$.consensus.relayTransaction(tx);
     }
 
@@ -129,7 +132,10 @@ export default class NanoApi {
         }
         const keyPair = Nimiq.KeyPair.fromPrivateKey(privateKey);
         this.$.wallet = new Nimiq.Wallet(keyPair);
-        if (persist) await this.$.walletStore.put(this.$.wallet);
+        if (persist) {
+            if(!this.$.walletStore) this.$.walletStore = await new Nimiq.WalletStore();
+            await this.$.walletStore.put(this.$.wallet);
+        }
         return this.address;
     }
 
@@ -148,12 +154,14 @@ export default class NanoApi {
         return this.$.wallet.unlock(pin);
     }
 
-    async importEncrypted(encryptedKey, password) {
+    async importEncrypted(encryptedKey, password, persist = true) {
         await this._apiInitialized;
         encryptedKey = Nimiq.BufferUtils.fromBase64(encryptedKey);
         this.$.wallet = await Nimiq.Wallet.loadEncrypted(encryptedKey, password);
-        // this.$.walletStore = this.$.walletStore || await new Nimiq.WalletStore();
-        // this.$.walletStore.put(this.$.wallet);
+        if (persist) {
+            if(!this.$.walletStore) this.$.walletStore = await new Nimiq.WalletStore();
+            await this.$.walletStore.put(this.$.wallet);
+        }
     }
 
     async exportEncrypted(password) {
