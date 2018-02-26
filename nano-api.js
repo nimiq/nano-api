@@ -32,9 +32,11 @@ export default class NanoApi {
     }
 
     async loadWallet() {
-        if(!this.$.walletStore) this.$.walletStore = await new Nimiq.WalletStore();
-        if(!this.$.wallet) this.$.wallet = await this.$.walletStore.getDefault();
-        this.onAddressChanged(this.address);
+        if(!this.$.wallet) {
+            if(!this.$.walletStore) this.$.walletStore = await new Nimiq.WalletStore();
+            this.$.wallet = await this.$.walletStore.getDefault();
+            this.onAddressChanged(this.address);
+        }
     }
 
     async connect() {
@@ -57,8 +59,9 @@ export default class NanoApi {
 
     async _getAccount() {
         await this._apiInitialized;
+        await this.loadWallet();
         const account = await this.$.consensus.getAccount(this.$.wallet.address);
-        return account || { balance: 0, nonce: 0 }
+        return account || { balance: 0 }
     }
 
     async _getBalance() {
@@ -92,6 +95,7 @@ export default class NanoApi {
 
     async getAddress() {
         await this._apiInitialized;
+        await this.loadWallet();
         return this.address;
     }
 
@@ -162,6 +166,7 @@ export default class NanoApi {
             if(!this.$.walletStore) this.$.walletStore = await new Nimiq.WalletStore();
             await this.$.walletStore.put(this.$.wallet);
         }
+        return this.address;
     }
 
     async exportEncrypted(password) {
@@ -197,7 +202,7 @@ export default class NanoApi {
 
     onConsensusEstablished() {
         console.log('consensus established');
-        this.fire('nimiq-consensus-established', this.address);
+        this.fire('nimiq-consensus-established'/*, this.address*/);
     }
 
     onBalanceChanged(balance) {
