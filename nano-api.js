@@ -28,6 +28,7 @@ export default class NanoApi {
 
     async _onApiReady() {
         await Nimiq.Crypto.prepareSyncCryptoWorker();
+        await this.loadWallet();
         this.onInitialized();
     }
 
