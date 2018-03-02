@@ -28,6 +28,7 @@ export default class NanoNetworkApi {
         }, e => {
             this.onDifferentTabError(e);
         });
+        return this._apiInitialized;
     }
 
     async _onApiReady() {
