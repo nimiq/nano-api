@@ -41,7 +41,7 @@ export default class NanoApi {
 
     async connect() {
         await this._apiInitialized;
-        this.$.consensus = await Nimiq.Consensus.nano();
+        this.$.consensus = await Nimiq.Consensus.volatileNano();
         this.$.consensus.on('established', e => this._onConsensusEstablished());
         this.$.consensus.network.connect();
         this.$.consensus.blockchain.on('head-changed', e => this._headChanged());
