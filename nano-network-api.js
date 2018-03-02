@@ -80,7 +80,7 @@ export default class NanoNetworkApi {
     /*
         Public API
     */
-    async sendTransaction(obj) {
+    async relayTransaction(obj) {
         await this._apiInitialized;
         const senderPublicKey = Nimiq.Address.fromUserFriendlyAddress(Nimiq.PublicKey.unserialize(obj.senderPublicKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
