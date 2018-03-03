@@ -12,6 +12,8 @@ export default class NanoNetworkApi {
         this._apiInitialized = new Promise((resolve) => {
             this._initResolve = resolve;
         });
+        this._addresses = new Set();
+        this._balances = new Map();
     }
 
     async init() {
@@ -47,11 +49,12 @@ export default class NanoNetworkApi {
 
     async _headChanged() {
         if (!this.$.consensus.established) return;
-        // FIXME with subscribed-to addresses
-        // const balance = await this._getBalance();
-        // if (this._balance === balance) return;
-        // this._balance = balance;
-        // this.onBalanceChanged(this.balance);
+        this._balances.forEach(async (storedBalance, address, map) => {
+            const balance = await this._getBalance(address);
+            if (storedBalance === balance) return;
+            map.set(address, balance);
+            this.onBalanceChanged(address, balance);
+        });
     }
 
     async _getAccount(address) {
@@ -62,7 +65,9 @@ export default class NanoNetworkApi {
 
     async _getBalance(address) {
         const account = await this._getAccount(address);
-        return account.balance / NanoNetworkApi.satoshis;
+        const balance = account.balance / NanoNetworkApi.satoshis;
+        if (this._balances.has(address)) this._balances.set(address, balance);
+        return balance;
     }
 
     _onConsensusEstablished() {
@@ -70,12 +75,12 @@ export default class NanoNetworkApi {
         this.onConsensusEstablished();
     }
 
-    // FIXME with the list of subscribed-to addresses
-    // _transactionAdded(tx) {
-    //     if (!tx.recipient.equals(this.$.wallet.address)) return;
-    //     const sender = tx.senderPubKey.toAddress();
-    //     this.onTransactionReceived(sender.toUserFriendlyAddress(), tx.value / NanoNetworkApi.satoshis, tx.fee);
-    // }
+    _transactionAdded(tx) {
+        const recipientAddr = tx.recipient.toUserFriendlyAddress();
+        if (!this._addresses.has(recipientAddr)) return;
+        const sender = tx.senderPubKey.toAddress();
+        this.onTransactionReceived(sender.toUserFriendlyAddress(), recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis);
+    }
 
     /*
         Public API
@@ -94,8 +99,13 @@ export default class NanoNetworkApi {
         return this.$.consensus.relayTransaction(tx);
     }
 
-    async getBalance(address) {
+    getBalance(address) {
         return this._getBalance(address);
+    }
+
+    subscribeAddress(address) {
+        this._addresses.add(address);
+        this._balances.set(address, 0);
     }
 
     /** @param {string} friendlyAddress */
@@ -120,7 +130,7 @@ export default class NanoNetworkApi {
     }
 
     onTransactionReceived(sender, recipient, value, fee) {
-        console.log('received:', value, 'from:', sender, 'txfee:', fee);
+        console.log('received:', value, 'to:', recipient, 'from:', sender, 'txfee:', fee);
         this.fire('nimiq-transaction', { sender, recipient, value, fee });
     }
 
