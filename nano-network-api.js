@@ -108,6 +108,11 @@ export default class NanoNetworkApi {
         this._balances.set(address, 0);
     }
 
+    subscribeAndGetBalance(address) {
+        this.subscribeAddress(address);
+        return this.getBalance(address);
+    }
+
     /** @param {string} friendlyAddress */
     async getUnfriendlyAddress(friendlyAddress) {
         await this._apiInitialized;
