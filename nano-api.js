@@ -3,6 +3,7 @@ export default class NanoApi {
     /*
     @asset(/libraries/nano-api/dist/nimiq.js)
     @asset(/libraries/nano-api/dist/web.js)
+    @asset(/libraries/nano-api/dist/web-babel.js)
     @asset(/libraries/nano-api/dist/worker.js)
     @asset(/libraries/nano-api/dist/worker-js.js)
     @asset(/libraries/nano-api/dist/worker-wasm.js)
