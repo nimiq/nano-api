@@ -202,3 +202,5 @@ export default class NanoNetworkApi {
         throw new Error('Method needs to be overwritten by subclasses');
     }
 }
+
+// todo simplify resolve (see nano-api.js)
