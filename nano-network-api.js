@@ -12,7 +12,6 @@ export default class NanoNetworkApi {
         this._apiInitialized = new Promise((resolve) => {
             this._initResolve = resolve;
         });
-        this._addresses = new Set();
         this._balances = new Map();
     }
 
@@ -77,7 +76,7 @@ export default class NanoNetworkApi {
 
     _transactionAdded(tx) {
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
-        if (!this._addresses.has(recipientAddr)) return;
+        if (!(new Set(this._balances.keys())).has(recipientAddr)) return;
         const sender = tx.senderPubKey.toAddress();
         this.onTransactionReceived(sender.toUserFriendlyAddress(), recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis);
     }
@@ -104,7 +103,6 @@ export default class NanoNetworkApi {
     }
 
     subscribeAddress(address) {
-        this._addresses.add(address);
         this._balances.set(address, 0);
     }
 
