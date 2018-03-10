@@ -202,3 +202,4 @@ export default class NanoNetworkApi {
 }
 
 // todo simplify resolve (see nano-api.js)
+// todo replace master by release before release!
