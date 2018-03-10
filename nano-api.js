@@ -38,7 +38,11 @@ export default class NanoApi {
 
     async _onApiReady() {
         await Nimiq.Crypto.prepareSyncCryptoWorker();
-        await this.loadWallet();
+        
+        // Trigger iOS WASM bug
+        const keys = Nimiq.KeyPair.generate();
+        const address = keys.publicKey.toAddress();
+
         this.onInitialized();
     }
 
@@ -128,12 +132,12 @@ export default class NanoApi {
     async generateKeyPair() {
         await this._apiInitialized;
         const keys = Nimiq.KeyPair.generate();
-        const privKey = keys.privateKey
+        const privKey = keys.privateKey;
         const address = keys.publicKey.toAddress();
         return {
             privateKey: privKey,
             address: address.toUserFriendlyAddress()
-        }
+        };
     }
 
     async importKey(privateKey, persist = true) {
