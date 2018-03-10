@@ -1,6 +1,6 @@
 export default class NanoApi {
 
-    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
+    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/release/nimiq.js' }
     static get satoshis() { return 100000000 }
 
     static getApi() {
