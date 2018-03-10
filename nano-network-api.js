@@ -9,45 +9,25 @@ export default class NanoNetworkApi {
     }
 
     constructor() {
-        this._apiInitialized = new Promise((resolve) => {
-            this._initResolve = resolve;
+        this._apiInitialized = new Promise(async (resolve) => {
+            await NanoNetworkApi._importApi();
+            await Nimiq.load();
+            resolve();
         });
         this._balances = new Map();
     }
 
-    async init() {
-        await NanoNetworkApi._importApi();
-        this.$ = {}
-        Nimiq.init(async $ => {
-            try {
-                await this._onApiReady();
-                this._initResolve();
-            } catch(e) {
-                console.error(e);
-                this.onInitializationError(e);
-            }
-        }, e => {
-            this.onDifferentTabError(e);
-        });
-        return this._apiInitialized;
-    }
-
-    async _onApiReady() {
-        await Nimiq.Crypto.prepareSyncCryptoWorker();
-        this.onInitialized();
-    }
-
     async connect() {
         await this._apiInitialized;
-        this.$.consensus = await Nimiq.Consensus.volatileNano();
-        this.$.consensus.on('established', e => this._onConsensusEstablished());
-        this.$.consensus.network.connect();
-        this.$.consensus.blockchain.on('head-changed', e => this._headChanged());
-        this.$.consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
+        this._consensus = await Nimiq.Consensus.volatileNano();
+        this._consensus.on('established', e => this._onConsensusEstablished());
+        this._consensus.network.connect();
+        this._consensus.blockchain.on('head-changed', e => this._headChanged());
+        this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
     }
 
     async _headChanged() {
-        if (!this.$.consensus.established) return;
+        if (!this._consensus.established) return;
         this._balances.forEach(async (storedBalance, address, map) => {
             const balance = await this._getBalance(address);
             if (storedBalance === balance) return;
@@ -58,7 +38,7 @@ export default class NanoNetworkApi {
 
     async _getAccount(address) {
         await this._apiInitialized;
-        const account = await this.$.consensus.getAccount(Nimiq.Address.fromUserFriendlyAddress(address));
+        const account = await this._consensus.getAccount(Nimiq.Address.fromUserFriendlyAddress(address));
         return account || { balance: 0 }
     }
 
@@ -95,7 +75,7 @@ export default class NanoNetworkApi {
 
         const tx = new Nimiq.BasicTransaction(senderPublicKey, recipientAddr, value, fee, validityStart, signature);
 
-        return this.$.consensus.relayTransaction(tx);
+        return this._consensus.relayTransaction(tx);
     }
 
     getBalance(address) {
@@ -201,5 +181,4 @@ export default class NanoNetworkApi {
     }
 }
 
-// todo simplify resolve (see nano-api.js)
 // todo replace master by release before release!
