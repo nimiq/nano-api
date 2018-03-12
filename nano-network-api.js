@@ -20,7 +20,15 @@ export default class NanoNetworkApi {
     async connect() {
         await this._apiInitialized;
         this._consensus = await Nimiq.Consensus.volatileNano();
+        this._consensus.on('syncing', e => this.onConsensusSyncing());
         this._consensus.on('established', e => this._onConsensusEstablished());
+        this._consensus.on('lost', e => this.onConsensusLost());
+
+        // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
+        // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
+        // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
+        // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
+
         this._consensus.network.connect();
         this._consensus.blockchain.on('head-changed', e => this._headChanged());
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
@@ -102,9 +110,19 @@ export default class NanoNetworkApi {
         this.fire('nimiq-api-ready');
     }
 
+    onConsensusSyncing() {
+        console.log('consensus syncing');
+        this.fire('nimiq-consensus-syncing');
+    }
+
     onConsensusEstablished() {
         console.log('consensus established');
         this.fire('nimiq-consensus-established');
+    }
+
+    onConsensusLost() {
+        console.log('consensus lost');
+        this.fire('nimiq-consensus-lost');
     }
 
     onBalanceChanged(address, balance) {
