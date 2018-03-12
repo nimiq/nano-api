@@ -71,13 +71,23 @@ export default class NanoNetworkApi {
 
     /*
         Public API
+
+        @param {object} obj: {
+            sender: <plain address>,
+            senderPublicKey: <serialized public key>,
+            recipient: <plain address>,
+            value: <value in NIM>,
+            fee: <value in NIM>,
+            validityStart: <integer>,
+            signature: <serialized signature>
+        }
     */
     async relayTransaction(obj) {
         await this._apiInitialized;
         const senderPublicKey = Nimiq.Address.fromUserFriendlyAddress(Nimiq.PublicKey.unserialize(obj.senderPublicKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
-        const value = Math.round(Number(obj.value) * NanoNetworkApi.satoshis);
-        const fee = Math.round(Number(obj.fee) * NanoNetworkApi.satoshis);
+        const value = Nimiq.Policy.coinsToSatoshis(obj.value);
+        const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
         const validityStart = parseInt(obj.validityStart);
         const signature = Nimiq.Signature.unserialize(obj.signature);
 
