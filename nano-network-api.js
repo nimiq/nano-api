@@ -74,7 +74,7 @@ export default class NanoNetworkApi {
 
         @param {object} obj: {
             sender: <plain address>,
-            senderPublicKey: <serialized public key>,
+            senderPubKey: <serialized public key>,
             recipient: <plain address>,
             value: <value in NIM>,
             fee: <value in NIM>,
@@ -84,14 +84,14 @@ export default class NanoNetworkApi {
     */
     async relayTransaction(obj) {
         await this._apiInitialized;
-        const senderPublicKey = Nimiq.Address.fromUserFriendlyAddress(Nimiq.PublicKey.unserialize(obj.senderPublicKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(Nimiq.SerialBuffer.from(obj.senderPubKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
         const validityStart = parseInt(obj.validityStart);
-        const signature = Nimiq.Signature.unserialize(obj.signature);
+        const signature = Nimiq.Signature.unserialize(Nimiq.SerialBuffer.from(obj.signature));
 
-        const tx = new Nimiq.BasicTransaction(senderPublicKey, recipientAddr, value, fee, validityStart, signature);
+        const tx = new Nimiq.BasicTransaction(senderPubKey, recipientAddr, value, fee, validityStart, signature);
 
         return this._consensus.relayTransaction(tx);
     }
