@@ -10,7 +10,8 @@ export default class NanoApi {
     @asset(/libraries/nano-api/dist/worker-wasm.wasm)
     */
 
-    static get API_URL() { return '/libraries/nano-api/dist/nimiq.js' }
+    // static get API_URL() { return '/libraries/nano-api/dist/nimiq.js' }
+    static get API_URL() { return '../core/nimiq.js' }
     static get satoshis() { return 100000000 }
 
     static getApi() {
