@@ -41,6 +41,8 @@ export default class NanoApi {
 
     async connect() {
         await this._apiInitialized;
+        // TODO: Make GenesisConfig configurable
+        Nimiq.GenesisConfig.dev();
         this.$.consensus = await Nimiq.Consensus.volatileNano();
         this.$.consensus.on('established', e => this._onConsensusEstablished());
         this.$.consensus.network.connect();

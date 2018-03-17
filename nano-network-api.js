@@ -19,6 +19,7 @@ export default class NanoNetworkApi {
 
     async connect() {
         await this._apiInitialized;
+        Nimiq.GenesisConfig.dev();
         this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this.onConsensusSyncing());
         this._consensus.on('established', e => this._onConsensusEstablished());
@@ -30,8 +31,10 @@ export default class NanoNetworkApi {
         // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
 
         this._consensus.network.connect();
+
         this._consensus.blockchain.on('head-changed', e => this._headChanged());
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
+        this._consensus.network.on('peers-changed', () => this.onPeersChanged());
     }
 
     async _headChanged() {
@@ -153,6 +156,11 @@ export default class NanoNetworkApi {
     onInitializationError(e) {
         console.log('Nimiq API could not be initialized:', e);
         this.fire('nimiq-api-fail', e);
+    }
+
+    onPeersChanged() {
+        console.log('peers changed:', this._consensus.network.peerCount);
+        this.fire('nimiq-peer-count', this._consensus.network.peerCount);
     }
 
     static validateAddress(address) {
