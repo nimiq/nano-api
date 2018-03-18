@@ -14,6 +14,8 @@ export default class NanoNetworkApi {
             await Nimiq.load();
             resolve();
         });
+        this._createConsensusPromise();
+
         this._balances = new Map();
     }
 
@@ -23,7 +25,7 @@ export default class NanoNetworkApi {
         this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this.onConsensusSyncing());
         this._consensus.on('established', e => this._onConsensusEstablished());
-        this._consensus.on('lost', e => this.onConsensusLost());
+        this._consensus.on('lost', e => this._onConsensusLost());
 
         // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
         // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
@@ -48,7 +50,7 @@ export default class NanoNetworkApi {
     }
 
     async _getAccount(address) {
-        await this._apiInitialized;
+        await this._consensusEstablished;
         const account = await this._consensus.getAccount(Nimiq.Address.fromUserFriendlyAddress(address));
         return account || { balance: 0 };
     }
@@ -65,8 +67,14 @@ export default class NanoNetworkApi {
     }
 
     _onConsensusEstablished() {
+        this._consensusEstablishedResolver();
         this._headChanged();
         this.onConsensusEstablished();
+    }
+
+    _onConsensusLost() {
+        this._createConsensusPromise();
+        this.onConsensusLost();
     }
 
     _transactionAdded(tx) {
@@ -74,6 +82,12 @@ export default class NanoNetworkApi {
         if (!(new Set(this._balances.keys())).has(recipientAddr)) return;
         const sender = tx.senderPubKey.toAddress();
         this.onTransactionReceived(sender.toUserFriendlyAddress(), recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis);
+    }
+
+    _createConsensusPromise() {
+        this._consensusEstablished = new Promise(resolve => {
+            this._consensusEstablishedResolver = resolve;
+        });
     }
 
     /*
@@ -90,7 +104,7 @@ export default class NanoNetworkApi {
         }
     */
     async relayTransaction(obj) {
-        await this._apiInitialized;
+        await this._consensusEstablished;
         const senderPubKey = Nimiq.PublicKey.unserialize(Nimiq.SerialBuffer.from(obj.senderPubKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
