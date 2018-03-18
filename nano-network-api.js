@@ -50,7 +50,11 @@ export default class NanoNetworkApi {
     async _getAccount(address) {
         await this._apiInitialized;
         const account = await this._consensus.getAccount(Nimiq.Address.fromUserFriendlyAddress(address));
-        return account || { balance: 0 }
+        return account || { balance: 0 };
+    }
+
+    _subscribeAddress(address) {
+        this._balances.set(address, 0);
     }
 
     async _getBalance(address) {
@@ -99,17 +103,16 @@ export default class NanoNetworkApi {
         return this._consensus.relayTransaction(tx);
     }
 
-    getBalance(address) {
-        return this._getBalance(address);
-    }
+    /**
+     * @param {string|Array<string>} addresses
+     */
+    subscribe(addresses) {
+        if (!(addresses instanceof Array)) addresses = [addresses];
 
-    subscribeAddress(address) {
-        this._balances.set(address, 0);
-    }
-
-    subscribeAndGetBalance(address) {
-        this.subscribeAddress(address);
-        return this.getBalance(address);
+        addresses.forEach(async address => {
+            this._subscribeAddress(address);
+            this.onBalanceChanged(address, await this._getBalance(address));
+        });
     }
 
     /** @param {string} friendlyAddress */
