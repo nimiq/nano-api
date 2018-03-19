@@ -90,7 +90,7 @@ export default class NanoNetworkApi {
         const trackedAddresses = new Set(this._balances.keys());
 
         if (trackedAddresses.has(senderAddr) || trackedAddresses.has(recipientAddr)) {
-            this.onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash());
+            this.onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64());
         }
     }
 
@@ -100,7 +100,7 @@ export default class NanoNetworkApi {
         const trackedAddresses = new Set(this._balances.keys());
 
         if (trackedAddresses.has(recipientAddr) || trackedAddresses.has(senderAddr)) {
-            this.onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash(), this._consensus.blockchain.head.height, this._consensus.blockchain.head.timestamp);
+            this.onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), this._consensus.blockchain.head.height, this._consensus.blockchain.head.timestamp);
         }
     }
 
@@ -168,9 +168,9 @@ export default class NanoNetworkApi {
         txs = txs.map(tx => ({
             sender: tx.transaction.sender.toUserFriendlyAddress(),
             recipient: tx.transaction.recipient.toUserFriendlyAddress(),
-            value: tx.value / NanoNetworkApi.satoshis,
-            fee: tx.fee / NanoNetworkApi.satoshis,
-            hash: tx.hash(),
+            value: tx.transaction.value / NanoNetworkApi.satoshis,
+            fee: tx.transaction.fee / NanoNetworkApi.satoshis,
+            hash: tx.transaction.hash().toBase64(),
             blockHeight: tx.header.height,
             timestamp: tx.header.timestamp
         }));
