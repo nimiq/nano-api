@@ -140,13 +140,18 @@ export default class NanoNetworkApi {
     /**
      * @param {string|Array<string>} addresses
      */
-    subscribe(addresses) {
+    async subscribe(addresses) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
-        addresses.forEach(async address => {
+        const balanceChecks = addresses.map(async address => {
             this._subscribeAddress(address);
             this.onBalanceChanged(address, await this._getBalance(address));
         });
+
+        // Update NanoConsensus subscriptions
+        await Promise.all(balanceChecks);
+        const addressesAsAddresses = [...this._balances.keys()].map(address => Nimiq.Address.fromUserFriendlyAddress(address));
+        this._consensus.subscribeAccounts(addressesAsAddresses);
     }
 
     getBalance(address) {
@@ -211,12 +216,12 @@ export default class NanoNetworkApi {
     }
 
     onTransactionPending(sender, recipient, value, fee, hash) {
-        console.log('pending:', 'from:', sender, 'to:', recipient, 'value:', value, 'fee:', fee);
+        console.log('pending:', { sender, recipient, value, fee, hash });
         this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, hash });
     }
 
     onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp) {
-        console.log('mined:', 'from:', sender, 'to:', recipient, 'value:', value, 'fee:', fee);
+        console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp });
         this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp });
     }
 
