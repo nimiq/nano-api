@@ -36,6 +36,8 @@ export default class NanoNetworkApi {
 
         this._consensus.blockchain.on('head-changed', e => this._headChanged());
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
+        // this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
+        this._consensus.mempool.on('transaction-mined', tx => this._transactionMined(tx));
         this._consensus.network.on('peers-changed', () => this.onPeersChanged());
     }
 
@@ -66,6 +68,11 @@ export default class NanoNetworkApi {
         return balance;
     }
 
+    async _requestTransactionHistory(address) {
+        await this._consensusEstablished;
+        return await this._consensus._requestTransactionHistory(Nimiq.Address.fromUserFriendlyAddress(address));
+    }
+
     _onConsensusEstablished() {
         this._consensusEstablishedResolver();
         this._headChanged();
@@ -79,9 +86,22 @@ export default class NanoNetworkApi {
 
     _transactionAdded(tx) {
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
-        if (!(new Set(this._balances.keys())).has(recipientAddr)) return;
-        const sender = tx.senderPubKey.toAddress();
-        this.onTransactionReceived(sender.toUserFriendlyAddress(), recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis);
+        const senderAddr = tx.sender.toUserFriendlyAddress();
+        const trackedAddresses = new Set(this._balances.keys());
+
+        if (trackedAddresses.has(senderAddr) || trackedAddresses.has(recipientAddr)) {
+            this.onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash());
+        }
+    }
+
+    _transactionMined(tx) {
+        const recipientAddr = tx.recipient.toUserFriendlyAddress();
+        const senderAddr = tx.sender.toUserFriendlyAddress();
+        const trackedAddresses = new Set(this._balances.keys());
+
+        if (trackedAddresses.has(recipientAddr) || trackedAddresses.has(senderAddr)) {
+            this.onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash(), this._consensus.blockchain.head.height, this._consensus.blockchain.head.timestamp);
+        }
     }
 
     _createConsensusPromise() {
@@ -94,11 +114,11 @@ export default class NanoNetworkApi {
         Public API
 
         @param {object} obj: {
-            sender: <plain address>,
+            sender: <user friendly address>,
             senderPubKey: <serialized public key>,
-            recipient: <plain address>,
+            recipient: <user friendly address>,
             value: <value in NIM>,
-            fee: <value in NIM>,
+            fee: <fee in NIM>,
             validityStart: <integer>,
             signature: <serialized signature>
         }
@@ -127,6 +147,36 @@ export default class NanoNetworkApi {
             this._subscribeAddress(address);
             this.onBalanceChanged(address, await this._getBalance(address));
         });
+    }
+
+    getBalance(address) {
+        return this._getBalance(address);
+    }
+
+    async requestTransactionHistory(addresses) {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+
+        let txs = await Promise.all(addresses.map(address => this._requestTransactionHistory(address)));
+
+        // txs is an array of arrays of objects, which have the format {transaction: Nimiq.Transaction, header: Nimiq.BlockHeader}
+        // We need to reduce this to usable simple tx objects
+
+        // First, reduce
+        txs = txs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+
+        // Then map to simple object
+        txs = txs.map(tx => ({
+            sender: tx.transaction.sender.toUserFriendlyAddress(),
+            recipient: tx.transaction.recipient.toUserFriendlyAddress(),
+            value: tx.value / NanoNetworkApi.satoshis,
+            fee: tx.fee / NanoNetworkApi.satoshis,
+            hash: tx.hash(),
+            blockHeight: tx.header.height,
+            timestamp: tx.header.timestamp
+        }));
+
+        // Finally, sort the array
+        return txs.sort((a, b) => a.blockHeight - b.blockHeight);
     }
 
     /** @param {string} friendlyAddress */
@@ -160,9 +210,14 @@ export default class NanoNetworkApi {
         this.fire('nimiq-balance', {address, balance});
     }
 
-    onTransactionReceived(sender, recipient, value, fee) {
-        console.log('received:', value, 'to:', recipient, 'from:', sender, 'txfee:', fee);
-        this.fire('nimiq-transaction', { sender, recipient, value, fee });
+    onTransactionPending(sender, recipient, value, fee, hash) {
+        console.log('pending:', 'from:', sender, 'to:', recipient, 'value:', value, 'fee:', fee);
+        this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, hash });
+    }
+
+    onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp) {
+        console.log('mined:', 'from:', sender, 'to:', recipient, 'value:', value, 'fee:', fee);
+        this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp });
     }
 
     onDifferentTabError(e) {
