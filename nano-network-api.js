@@ -151,6 +151,7 @@ export default class NanoNetworkApi {
         // Update NanoConsensus subscriptions
         await Promise.all(balanceChecks);
         const addressesAsAddresses = [...this._balances.keys()].map(address => Nimiq.Address.fromUserFriendlyAddress(address));
+        await this._consensusEstablished;
         this._consensus.subscribeAccounts(addressesAsAddresses);
     }
 
