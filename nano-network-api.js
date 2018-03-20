@@ -51,9 +51,22 @@ export default class NanoNetworkApi {
         });
     }
 
-    async _getAccount(address) {
+    async _getAccount(address, stackHeight) {
         await this._consensusEstablished;
-        const account = await this._consensus.getAccount(Nimiq.Address.fromUserFriendlyAddress(address));
+        let account;
+        try {
+            account = await this._consensus.getAccount(Nimiq.Address.fromUserFriendlyAddress(address));
+        } catch (e) {
+            stackHeight = stackHeight || 0;
+            stackHeight++;
+            return await new Promise(resolve => {
+                const timeout = 1000 * stackHeight;
+                setTimeout(async _ => {
+                    resolve(await this._getAccount(address, stackHeight));
+                }, timeout);
+                console.warn(`Could not retrieve account from consensus, retrying in ${timeout / 1000} s`);
+            });
+        }
         return account || { balance: 0 };
     }
 
