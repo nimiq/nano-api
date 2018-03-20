@@ -21,7 +21,7 @@ export default class NanoNetworkApi {
 
     async connect() {
         await this._apiInitialized;
-        Nimiq.GenesisConfig.dev();
+        Nimiq.GenesisConfig.bounty();
         this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this.onConsensusSyncing());
         this._consensus.on('established', e => this._onConsensusEstablished());
