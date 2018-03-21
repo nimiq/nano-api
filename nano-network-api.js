@@ -34,14 +34,14 @@ export default class NanoNetworkApi {
 
         this._consensus.network.connect();
 
-        this._consensus.blockchain.on('head-changed', e => this._headChanged());
+        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         // this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
         this._consensus.network.on('peers-changed', () => this.onPeersChanged());
     }
 
-    async _headChanged() {
+    async _headChanged(header) {
         if (!this._consensus.established) return;
         this._balances.forEach(async (storedBalance, address, map) => {
             const balance = await this._getBalance(address);
@@ -49,6 +49,7 @@ export default class NanoNetworkApi {
             map.set(address, balance);
             this.onBalanceChanged(address, balance);
         });
+        this.onHeadChange(header);
     }
 
     async _getAccount(address, stackHeight) {
@@ -88,7 +89,7 @@ export default class NanoNetworkApi {
 
     _onConsensusEstablished() {
         this._consensusEstablishedResolver();
-        this._headChanged();
+        this._headChanged(this._consensus.blockchain.head);
         this.onConsensusEstablished();
     }
 
@@ -205,52 +206,57 @@ export default class NanoNetworkApi {
     }
 
     onInitialized() {
-        console.log('Nimiq API ready to use');
+        // console.log('Nimiq API ready to use');
         this.fire('nimiq-api-ready');
     }
 
     onConsensusSyncing() {
-        console.log('consensus syncing');
+        // console.log('consensus syncing');
         this.fire('nimiq-consensus-syncing');
     }
 
     onConsensusEstablished() {
-        console.log('consensus established');
+        // console.log('consensus established');
         this.fire('nimiq-consensus-established');
     }
 
     onConsensusLost() {
-        console.log('consensus lost');
+        // console.log('consensus lost');
         this.fire('nimiq-consensus-lost');
     }
 
     onBalanceChanged(address, balance) {
-        console.log('new balance:', {address, balance});
+        // console.log('new balance:', {address, balance});
         this.fire('nimiq-balance', {address, balance});
     }
 
     onTransactionPending(sender, recipient, value, fee, hash) {
-        console.log('pending:', { sender, recipient, value, fee, hash });
+        // console.log('pending:', { sender, recipient, value, fee, hash });
         this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, hash });
     }
 
     onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp) {
-        console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp });
+        // console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp });
         this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp });
     }
 
     onDifferentTabError(e) {
-        console.log('Nimiq API is already running in a different tab:', e);
+        // console.log('Nimiq API is already running in a different tab:', e);
         this.fire('nimiq-different-tab-error', e);
     }
 
     onInitializationError(e) {
-        console.log('Nimiq API could not be initialized:', e);
+        // console.log('Nimiq API could not be initialized:', e);
         this.fire('nimiq-api-fail', e);
     }
 
+    onHeadChange(header) {
+        // console.log('height changed:', height);
+        this.fire('nimiq-head-change', header.height);
+    }
+
     onPeersChanged() {
-        console.log('peers changed:', this._consensus.network.peerCount);
+        // console.log('peers changed:', this._consensus.network.peerCount);
         this.fire('nimiq-peer-count', this._consensus.network.peerCount);
     }
 
