@@ -37,7 +37,7 @@ export default class NanoNetworkApi {
         this._consensus.blockchain.on('head-changed', e => this._headChanged());
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         // this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
-        this._consensus.mempool.on('transaction-mined', tx => this._transactionMined(tx));
+        this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
         this._consensus.network.on('peers-changed', () => this.onPeersChanged());
     }
 
@@ -107,13 +107,13 @@ export default class NanoNetworkApi {
         }
     }
 
-    _transactionMined(tx) {
+    _transactionMined(tx, header) {
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const trackedAddresses = new Set(this._balances.keys());
 
         if (trackedAddresses.has(recipientAddr) || trackedAddresses.has(senderAddr)) {
-            this.onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), this._consensus.blockchain.head.height, this._consensus.blockchain.head.timestamp);
+            this.onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp);
         }
     }
 
