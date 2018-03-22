@@ -133,7 +133,7 @@ export default class NanoNetworkApi {
             recipient: <user friendly address>,
             value: <value in NIM>,
             fee: <fee in NIM>,
-            validityStart: <integer>,
+            validityStartHeight: <integer>,
             signature: <serialized signature>
         }
     */
@@ -143,10 +143,10 @@ export default class NanoNetworkApi {
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
-        const validityStart = parseInt(obj.validityStart);
+        const validityStartHeight = parseInt(obj.validityStartHeight);
         const signature = Nimiq.Signature.unserialize(Nimiq.SerialBuffer.from(obj.signature));
 
-        const tx = new Nimiq.BasicTransaction(senderPubKey, recipientAddr, value, fee, validityStart, signature);
+        const tx = new Nimiq.BasicTransaction(senderPubKey, recipientAddr, value, fee, validityStartHeight, signature);
 
         return this._consensus.relayTransaction(tx);
     }
