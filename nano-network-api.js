@@ -199,6 +199,28 @@ export default class NanoNetworkApi {
         return txs.sort((a, b) => a.blockHeight - b.blockHeight);
     }
 
+    getGenesisVestingContracts() {
+        const accounts = new Map();
+        const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
+        const count = buf.readUint16();
+        for (let i = 0; i < count; i++) {
+            const address = Nimiq.Address.unserialize(buf);
+            const account = Nimiq.Account.unserialize(buf);
+
+            if (account.type === 1) {
+                accounts.set(address.toUserFriendlyAddress(), {
+                    balance: account.balance / NanoNetworkApi.satoshis,
+                    owner: account.owner.toUserFriendlyAddress(),
+                    start: account.vestingStart,
+                    stepAmount: account.vestingStepAmount / NanoNetworkApi.satoshis,
+                    stepBlocks: account.vestingStepBlocks,
+                    totalAmount: account.vestingTotalAmount / NanoNetworkApi.satoshis
+                });
+            }
+        }
+        return accounts;
+    }
+
     _onInitialized() {
         // console.log('Nimiq API ready to use');
         this.fire('nimiq-api-ready');
