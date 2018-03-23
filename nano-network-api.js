@@ -12,7 +12,7 @@ export default class NanoNetworkApi {
         this._apiInitialized = new Promise(async (resolve) => {
             await NanoNetworkApi._importApi();
             await Nimiq.load();
-            setTimeout(resolve, 200);
+            setTimeout(resolve, 500);
         });
         this._createConsensusPromise();
 
@@ -24,8 +24,8 @@ export default class NanoNetworkApi {
         Nimiq.GenesisConfig.bounty();
         this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this._onConsensusSyncing());
-        this._consensus.on('established', e => this.__onConsensusEstablished());
-        this._consensus.on('lost', e => this.__onConsensusLost());
+        this._consensus.on('established', e => this.__consensusEstablished());
+        this._consensus.on('lost', e => this._consensusLost());
 
         // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
         // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
@@ -43,43 +43,73 @@ export default class NanoNetworkApi {
 
     async _headChanged(header) {
         if (!this._consensus.established) return;
-        this._balances.forEach(async (storedBalance, address, map) => {
-            const balance = await this._getBalance(address);
-            if (storedBalance === balance) return;
-            map.set(address, balance);
-            this._onBalanceChanged(address, balance);
-        });
+        const balances = await this._getBalances([...this._balances.keys()]);
+
+        for (const [address, balance] of balances) {
+            if (this._balances.get(address) === balance) {
+                balances.delete(address);
+                continue;
+            }
+
+            this._balances.set(address, balance);
+        }
+
+        if (balances.size) this._onBalancesChanged(balances);
+
         this._onHeadChange(header);
     }
 
-    async _getAccount(address, stackHeight) {
+    /**
+     * @returns {Array<Account>} An array element can be NULL if account does not exist
+     */
+    async _getAccounts(addresses, stackHeight) {
         await this._consensusEstablished;
-        let account;
+        let accounts;
+        const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
         try {
-            account = await this._consensus.getAccount(Nimiq.Address.fromUserFriendlyAddress(address));
+            accounts = await this._consensus.getAccounts(addressesAsAddresses);
         } catch (e) {
             stackHeight = stackHeight || 0;
             stackHeight++;
             return await new Promise(resolve => {
                 const timeout = 1000 * stackHeight;
                 setTimeout(async _ => {
-                    resolve(await this._getAccount(address, stackHeight));
+                    resolve(await this._getAccounts(addresses, stackHeight));
                 }, timeout);
-                console.warn(`Could not retrieve account from consensus, retrying in ${timeout / 1000} s`);
+                console.warn(`Could not retrieve accounts from consensus, retrying in ${timeout / 1000} s`);
             });
         }
-        return account || { balance: 0 };
+
+        return accounts;
     }
 
-    _subscribeAddress(address) {
-        this._balances.set(address, 0);
+    /**
+     * @param {Array<string>} addresses
+     */
+    async _subscribeAddresses(addresses) {
+        addresses.forEach(address => this._balances.set(address, 0));
+
+        const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
+        await this._consensusEstablished;
+        this._consensus.subscribeAccounts(addressesAsAddresses);
     }
 
-    async _getBalance(address) {
-        const account = await this._getAccount(address);
-        const balance = account.balance / NanoNetworkApi.satoshis;
-        if (this._balances.has(address)) this._balances.set(address, balance);
-        return balance;
+    /**
+     * @param {Array<string>} addresses
+     * @returns {Map}
+     */
+    async _getBalances(addresses) {
+        let accounts = await this._getAccounts(addresses);
+
+        const balances = new Map();
+
+        accounts.forEach((account, i) => {
+            const address = addresses[i];
+            const balance = account ? account.balance / NanoNetworkApi.satoshis : 0 ;
+            balances.set(address, balance);
+        });
+
+        return balances;
     }
 
     async _requestTransactionHistory(address) {
@@ -87,13 +117,13 @@ export default class NanoNetworkApi {
         return await this._consensus._requestTransactionHistory(Nimiq.Address.fromUserFriendlyAddress(address));
     }
 
-    __onConsensusEstablished() {
+    __consensusEstablished() {
         this._consensusEstablishedResolver();
         this._headChanged(this._consensus.blockchain.head);
         this._onConsensusEstablished();
     }
 
-    __onConsensusLost() {
+    _consensusLost() {
         this._createConsensusPromise();
         this._onConsensusLost();
     }
@@ -127,7 +157,7 @@ export default class NanoNetworkApi {
     /*
         Public API
 
-        @param {object} obj: {
+        @param {Object} obj: {
             sender: <user friendly address>,
             senderPubKey: <serialized public key>,
             recipient: <user friendly address>,
@@ -157,20 +187,25 @@ export default class NanoNetworkApi {
     async subscribe(addresses) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
-        const balanceChecks = addresses.map(async address => {
-            this._subscribeAddress(address);
-            this._onBalanceChanged(address, await this._getBalance(address));
-        });
+        this._subscribeAddresses(addresses);
 
-        // Update NanoConsensus subscriptions
-        await Promise.all(balanceChecks);
-        const addressesAsAddresses = [...this._balances.keys()].map(address => Nimiq.Address.fromUserFriendlyAddress(address));
-        await this._consensusEstablished;
-        this._consensus.subscribeAccounts(addressesAsAddresses);
+        const balances = await this._getBalances(addresses);
+        for (const [address, balance] of balances) { this._balances.set(address, balance); }
+
+        this._onBalancesChanged(balances);
     }
 
-    getBalance(address) {
-        return this._getBalance(address);
+    /**
+     * @param {string|Array<string>} addresses
+     * @returns {Map}
+     */
+    getBalance(addresses) {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+
+        const balances = this._getBalances(addresses);
+        for (const [address, balance] of balances) { this._balances.set(address, balance); }
+
+        return balances;
     }
 
     async requestTransactionHistory(addresses) {
@@ -241,9 +276,9 @@ export default class NanoNetworkApi {
         this.fire('nimiq-consensus-lost');
     }
 
-    _onBalanceChanged(address, balance) {
-        // console.log('new balance:', {address, balance});
-        this.fire('nimiq-balance', {address, balance});
+    _onBalancesChanged(balances) {
+        // console.log('new balances:', balances);
+        this.fire('nimiq-balances', balances);
     }
 
     _onTransactionPending(sender, recipient, value, fee, hash) {
