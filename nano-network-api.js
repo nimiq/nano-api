@@ -23,9 +23,9 @@ export default class NanoNetworkApi {
         await this._apiInitialized;
         Nimiq.GenesisConfig.bounty();
         this._consensus = await Nimiq.Consensus.volatileNano();
-        this._consensus.on('syncing', e => this.onConsensusSyncing());
-        this._consensus.on('established', e => this._onConsensusEstablished());
-        this._consensus.on('lost', e => this._onConsensusLost());
+        this._consensus.on('syncing', e => this._onConsensusSyncing());
+        this._consensus.on('established', e => this.__onConsensusEstablished());
+        this._consensus.on('lost', e => this.__onConsensusLost());
 
         // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
         // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
@@ -38,7 +38,7 @@ export default class NanoNetworkApi {
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         // this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
-        this._consensus.network.on('peers-changed', () => this.onPeersChanged());
+        this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
     async _headChanged(header) {
@@ -47,9 +47,9 @@ export default class NanoNetworkApi {
             const balance = await this._getBalance(address);
             if (storedBalance === balance) return;
             map.set(address, balance);
-            this.onBalanceChanged(address, balance);
+            this._onBalanceChanged(address, balance);
         });
-        this.onHeadChange(header);
+        this._onHeadChange(header);
     }
 
     async _getAccount(address, stackHeight) {
@@ -87,15 +87,15 @@ export default class NanoNetworkApi {
         return await this._consensus._requestTransactionHistory(Nimiq.Address.fromUserFriendlyAddress(address));
     }
 
-    _onConsensusEstablished() {
+    __onConsensusEstablished() {
         this._consensusEstablishedResolver();
         this._headChanged(this._consensus.blockchain.head);
-        this.onConsensusEstablished();
+        this._onConsensusEstablished();
     }
 
-    _onConsensusLost() {
+    __onConsensusLost() {
         this._createConsensusPromise();
-        this.onConsensusLost();
+        this._onConsensusLost();
     }
 
     _transactionAdded(tx) {
@@ -104,7 +104,7 @@ export default class NanoNetworkApi {
         const trackedAddresses = new Set(this._balances.keys());
 
         if (trackedAddresses.has(senderAddr) || trackedAddresses.has(recipientAddr)) {
-            this.onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64());
+            this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64());
         }
     }
 
@@ -114,7 +114,7 @@ export default class NanoNetworkApi {
         const trackedAddresses = new Set(this._balances.keys());
 
         if (trackedAddresses.has(recipientAddr) || trackedAddresses.has(senderAddr)) {
-            this.onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp);
+            this._onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp);
         }
     }
 
@@ -159,7 +159,7 @@ export default class NanoNetworkApi {
 
         const balanceChecks = addresses.map(async address => {
             this._subscribeAddress(address);
-            this.onBalanceChanged(address, await this._getBalance(address));
+            this._onBalanceChanged(address, await this._getBalance(address));
         });
 
         // Update NanoConsensus subscriptions
@@ -199,103 +199,59 @@ export default class NanoNetworkApi {
         return txs.sort((a, b) => a.blockHeight - b.blockHeight);
     }
 
-    /** @param {string} friendlyAddress */
-    async getUnfriendlyAddress(friendlyAddress) {
-        await this._apiInitialized;
-        return Nimiq.Address.fromUserFriendlyAddress(friendlyAddress);
-    }
-
-    onInitialized() {
+    _onInitialized() {
         // console.log('Nimiq API ready to use');
         this.fire('nimiq-api-ready');
     }
 
-    onConsensusSyncing() {
+    _onConsensusSyncing() {
         // console.log('consensus syncing');
         this.fire('nimiq-consensus-syncing');
     }
 
-    onConsensusEstablished() {
+    _onConsensusEstablished() {
         // console.log('consensus established');
         this.fire('nimiq-consensus-established');
     }
 
-    onConsensusLost() {
+    _onConsensusLost() {
         // console.log('consensus lost');
         this.fire('nimiq-consensus-lost');
     }
 
-    onBalanceChanged(address, balance) {
+    _onBalanceChanged(address, balance) {
         // console.log('new balance:', {address, balance});
         this.fire('nimiq-balance', {address, balance});
     }
 
-    onTransactionPending(sender, recipient, value, fee, hash) {
+    _onTransactionPending(sender, recipient, value, fee, hash) {
         // console.log('pending:', { sender, recipient, value, fee, hash });
         this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, hash });
     }
 
-    onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp) {
+    _onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp) {
         // console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp });
         this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp });
     }
 
-    onDifferentTabError(e) {
+    _onDifferentTabError(e) {
         // console.log('Nimiq API is already running in a different tab:', e);
         this.fire('nimiq-different-tab-error', e);
     }
 
-    onInitializationError(e) {
+    _onInitializationError(e) {
         // console.log('Nimiq API could not be initialized:', e);
         this.fire('nimiq-api-fail', e);
     }
 
-    onHeadChange(header) {
+    _onHeadChange(header) {
         // console.log('height changed:', height);
         this.fire('nimiq-head-change', header.height);
     }
 
-    onPeersChanged() {
+    _onPeersChanged() {
         // console.log('peers changed:', this._consensus.network.peerCount);
         this.fire('nimiq-peer-count', this._consensus.network.peerCount);
-    }
-
-    static validateAddress(address) {
-        try {
-            this.isUserFriendlyAddress(address);
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    // Copied from: https://github.com/nimiq-network/core/blob/master/src/main/generic/consensus/base/account/Address.js
-
-    static isUserFriendlyAddress(str) {
-        str = str.replace(/ /g, '');
-        if (str.substr(0, 2).toUpperCase() !== 'NQ') {
-            throw new Error('Addresses start with NQ', 201);
-        }
-        if (str.length !== 36) {
-            throw new Error('Addresses are 36 chars (ignoring spaces)', 202);
-        }
-        if (this._ibanCheck(str.substr(4) + str.substr(0, 4)) !== 1) {
-            throw new Error('Address Checksum invalid', 203);
-        }
-    }
-
-    static _ibanCheck(str) {
-        const num = str.split('').map((c) => {
-            const code = c.toUpperCase().charCodeAt(0);
-            return code >= 48 && code <= 57 ? c : (code - 55).toString();
-        }).join('');
-        let tmp = '';
-
-        for (let i = 0; i < Math.ceil(num.length / 6); i++) {
-            tmp = (parseInt(tmp + num.substr(i * 6, 6)) % 97).toString();
-        }
-
-        return parseInt(tmp);
     }
 
     static _importApi() {
@@ -310,7 +266,7 @@ export default class NanoNetworkApi {
     }
 
     fire() {
-        throw new Error('Method needs to be overwritten by subclasses');
+        throw new Error('The fire() method needs to be overloaded!');
     }
 }
 
