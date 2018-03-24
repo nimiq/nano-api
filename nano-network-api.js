@@ -12,7 +12,8 @@ export default class NanoNetworkApi {
         this._apiInitialized = new Promise(async (resolve) => {
             await NanoNetworkApi._importApi();
             await Nimiq.load();
-            setTimeout(resolve, 500);
+            // setTimeout(resolve, 500);
+            resolve();
         });
         this._createConsensusPromise();
 
