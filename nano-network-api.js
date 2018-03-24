@@ -234,8 +234,9 @@ export default class NanoNetworkApi {
         return txs.sort((a, b) => a.blockHeight - b.blockHeight);
     }
 
-    getGenesisVestingContracts() {
-        const accounts = new Map();
+    async getGenesisVestingContracts() {
+        await this._apiInitialized;
+        const accounts = [];
         const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
         const count = buf.readUint16();
         for (let i = 0; i < count; i++) {
@@ -243,7 +244,8 @@ export default class NanoNetworkApi {
             const account = Nimiq.Account.unserialize(buf);
 
             if (account.type === 1) {
-                accounts.set(address.toUserFriendlyAddress(), {
+                accounts.push({
+                    address: address.toUserFriendlyAddress(),
                     balance: account.balance / NanoNetworkApi.satoshis,
                     owner: account.owner.toUserFriendlyAddress(),
                     start: account.vestingStart,
