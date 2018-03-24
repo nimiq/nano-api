@@ -246,7 +246,7 @@ export default class NanoNetworkApi {
             if (account.type === 1) {
                 accounts.push({
                     address: address.toUserFriendlyAddress(),
-                    balance: account.balance / NanoNetworkApi.satoshis,
+                    // balance: account.balance / NanoNetworkApi.satoshis,
                     owner: account.owner.toUserFriendlyAddress(),
                     start: account.vestingStart,
                     stepAmount: account.vestingStepAmount / NanoNetworkApi.satoshis,
