@@ -115,7 +115,51 @@ export default class NanoNetworkApi {
 
     async _requestTransactionHistory(address) {
         await this._consensusEstablished;
-        return await this._consensus._requestTransactionHistory(Nimiq.Address.fromUserFriendlyAddress(address));
+        address = Nimiq.Address.fromUserFriendlyAddress(address);
+
+        // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
+
+        // 1. Get transaction receipts.
+        const receipts = await this._consensus._requestTransactionReceipts(address);
+
+        // 3. Request proofs for missing blocks.
+        /** @type {Array.<Promise.<Block>>} */
+        const blockRequests = [];
+        let lastBlockHash = null;
+        for (const receipt of receipts) {
+            if (!receipt.blockHash.equals(lastBlockHash)) {
+                // eslint-disable-next-line no-await-in-loop
+                const block = await this._consensus._blockchain.getBlock(receipt.blockHash);
+                if (block) {
+                    blockRequests.push(Promise.resolve(block));
+                } else {
+                    const request = this._consensus._requestBlockProof(receipt.blockHash, receipt.blockHeight)
+                        .catch(e => console.error(NanoNetworkApi, `Failed to retrieve proof for block ${receipt.blockHash}`
+                            + ` (${e.message || e}) - transaction history may be incomplete`));
+                    blockRequests.push(request);
+                }
+
+                lastBlockHash = receipt.blockHash;
+            }
+        }
+        const blocks = await Promise.all(blockRequests);
+
+        // 4. Request transaction proofs.
+        const transactionRequests = [];
+        for (const block of blocks) {
+            if (!block) continue;
+
+            const request = this._consensus._requestTransactionsProof([address], block)
+                .then(txs => txs.map(tx => ({ transaction: tx, header: block.header })))
+                .catch(e => console.error(NanoNetworkApi, `Failed to retrieve transactions for block ${block.hash}`
+                    + ` (${e.message || e}) - transaction history may be incomplete`));
+            transactionRequests.push(request);
+        }
+
+        const transactions = await Promise.all(transactionRequests);
+        return transactions
+            .reduce((flat, it) => it ? flat.concat(it) : flat, [])
+            .sort((a, b) => a.header.height - b.header.height);
     }
 
     __consensusEstablished() {
