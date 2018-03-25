@@ -291,7 +291,7 @@ export default class NanoNetworkApi {
         // First, reduce
         txs = txs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
 
-        // Then map to simple object
+        // Then map to simple objects
         txs = txs.map(tx => ({
             sender: tx.transaction.sender.toUserFriendlyAddress(),
             recipient: tx.transaction.recipient.toUserFriendlyAddress(),
@@ -304,7 +304,8 @@ export default class NanoNetworkApi {
         }));
 
         // Finally, sort the array
-        return txs.sort((a, b) => a.blockHeight - b.blockHeight);
+        // return txs.sort((a, b) => a.blockHeight - b.blockHeight);
+        return txs; // Sorting is done in transaction-redux
     }
 
     async getGenesisVestingContracts() {
