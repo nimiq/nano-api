@@ -226,6 +226,10 @@ export default class NanoNetworkApi {
         });
     }
 
+    _globalHashrate(difficulty) {
+        return Math.round(difficulty * Math.pow(2, 16) / Nimiq.Policy.BLOCK_TIME);
+    }
+
     /*
         Public API
 
@@ -379,7 +383,10 @@ export default class NanoNetworkApi {
 
     _onHeadChange(header) {
         // console.log('height changed:', height);
-        this.fire('nimiq-head-change', header.height);
+        this.fire('nimiq-head-change', {
+            height: header.height,
+            globalHashrate: this._globalHashrate(header.difficulty)
+        });
     }
 
     _onPeersChanged() {
