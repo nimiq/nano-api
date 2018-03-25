@@ -113,9 +113,80 @@ export default class NanoNetworkApi {
         return balances;
     }
 
-    async _requestTransactionHistory(address) {
+    /**
+     * @param {string} address
+     * @param {Map} [knownReceipts] A map with the tx hash as key and the blockhash as value
+     * @param {uint} [fromHeight]
+     */
+    async _requestTransactionHistory(address, knownReceipts = new Map(), fromHeight = 0) {
         await this._consensusEstablished;
-        return await this._consensus._requestTransactionHistory(Nimiq.Address.fromUserFriendlyAddress(address));
+        address = Nimiq.Address.fromUserFriendlyAddress(address);
+
+        // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
+
+        // 1. Get transaction receipts.
+        let receipts = await this._consensus._requestTransactionReceipts(address);
+        // console.log(`Received ${receipts.length} receipts from the network.`);
+
+        // 2 Filter out known receipts.
+        const knownTxHashes = [...knownReceipts.keys()];
+
+        receipts = receipts.filter(receipt => {
+            if (receipt.blockHeight < fromHeight) return false;
+
+            const hash = receipt.transactionHash.toBase64();
+
+            // Known transaction
+            if (knownTxHashes.includes(hash)) {
+                // Check if block has changed
+                return receipt.blockHash.toBase64() !== knownReceipts.get(hash);
+            }
+
+            // Unknown transaction
+            return true;
+        });
+        // console.log(`Reduced to ${receipts.length} unknown receipts.`);
+
+        // FIXME TODO: Check for tx that have been removed from the blockchain!
+
+        // 3. Request proofs for missing blocks.
+        /** @type {Array.<Promise.<Block>>} */
+        const blockRequests = [];
+        let lastBlockHash = null;
+        for (const receipt of receipts) {
+            if (!receipt.blockHash.equals(lastBlockHash)) {
+                // eslint-disable-next-line no-await-in-loop
+                const block = await this._consensus._blockchain.getBlock(receipt.blockHash);
+                if (block) {
+                    blockRequests.push(Promise.resolve(block));
+                } else {
+                    const request = this._consensus._requestBlockProof(receipt.blockHash, receipt.blockHeight)
+                        .catch(e => console.error(NanoNetworkApi, `Failed to retrieve proof for block ${receipt.blockHash}`
+                            + ` (${e.message || e}) - transaction history may be incomplete`));
+                    blockRequests.push(request);
+                }
+
+                lastBlockHash = receipt.blockHash;
+            }
+        }
+        const blocks = await Promise.all(blockRequests);
+
+        // 4. Request transaction proofs.
+        const transactionRequests = [];
+        for (const block of blocks) {
+            if (!block) continue;
+
+            const request = this._consensus._requestTransactionsProof([address], block)
+                .then(txs => txs.map(tx => ({ transaction: tx, header: block.header })))
+                .catch(e => console.error(NanoNetworkApi, `Failed to retrieve transactions for block ${block.hash}`
+                    + ` (${e.message || e}) - transaction history may be incomplete`));
+            transactionRequests.push(request);
+        }
+
+        const transactions = await Promise.all(transactionRequests);
+        return transactions
+            .reduce((flat, it) => it ? flat.concat(it) : flat, [])
+            .sort((a, b) => a.header.height - b.header.height);
     }
 
     __consensusEstablished() {
@@ -209,10 +280,10 @@ export default class NanoNetworkApi {
         return balances;
     }
 
-    async requestTransactionHistory(addresses) {
+    async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
-        let txs = await Promise.all(addresses.map(address => this._requestTransactionHistory(address)));
+        let txs = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts, fromHeight)));
 
         // txs is an array of arrays of objects, which have the format {transaction: Nimiq.Transaction, header: Nimiq.BlockHeader}
         // We need to reduce this to usable simple tx objects
@@ -228,6 +299,7 @@ export default class NanoNetworkApi {
             fee: tx.transaction.fee / NanoNetworkApi.satoshis,
             hash: tx.transaction.hash().toBase64(),
             blockHeight: tx.header.height,
+            blockHash: tx.header.hash().toBase64(),
             timestamp: tx.header.timestamp
         }));
 
