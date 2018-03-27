@@ -299,6 +299,15 @@ export default class NanoApi {
         });
     }
 
+    static isValidHash(hash) {
+        // not using Nimiq Api here to don't require it to be loaded already
+        try {
+            return atob(hash).length === 32;
+        } catch(e) {
+            return false;
+        }
+    }
+
     setXElement(xElement) {
        this._xElement = xElement;
        this.fire = this._xElement.fire.bind(xElement);
