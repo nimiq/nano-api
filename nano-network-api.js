@@ -64,6 +64,7 @@ export default class NanoNetworkApi {
      * @returns {Array<Account>} An array element can be NULL if account does not exist
      */
     async _getAccounts(addresses, stackHeight) {
+        if (addresses.length === 0) return [];
         await this._consensusEstablished;
         let accounts;
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
