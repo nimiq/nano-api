@@ -285,6 +285,22 @@ export default class NanoNetworkApi {
         return balances;
     }
 
+    async getAccountTypeString(address) {
+        const account = await this._getAccounts([address])[0];
+
+        console.log("Requesting account type string for", address);
+
+        if (!account) return 'basic';
+
+        // See Nimiq.Account.Type
+        switch (account.type) {
+            case Nimiq.Account.Type.BASIC: return 'basic';
+            case Nimiq.Account.Type.VESTING: return 'vesting';
+            case Nimiq.Account.Type.HTLC: return 'htlc';
+            default: return false;
+        }
+    }
+
     async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
