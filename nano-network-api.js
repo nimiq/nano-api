@@ -286,9 +286,7 @@ export default class NanoNetworkApi {
     }
 
     async getAccountTypeString(address) {
-        const account = await this._getAccounts([address])[0];
-
-        console.log("Requesting account type string for", address);
+        const account = (await this._getAccounts([address]))[0];
 
         if (!account) return 'basic';
 
