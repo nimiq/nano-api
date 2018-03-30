@@ -47,7 +47,7 @@ export default class NanoNetworkApi {
 
         this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
-        // this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
+        this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
@@ -141,6 +141,9 @@ export default class NanoNetworkApi {
 
         // 2 Filter out known receipts.
         const knownTxHashes = [...knownReceipts.keys()];
+        const receiptTxHashes = receipts.map(r => r.transactionHash.toBase64());
+
+        const removedTxHashes = knownTxHashes.filter(knownTxHash => !receiptTxHashes.includes(knownTxHash));
 
         receipts = receipts.filter(receipt => {
             if (receipt.blockHeight < fromHeight) return false;
@@ -195,9 +198,12 @@ export default class NanoNetworkApi {
         }
 
         const transactions = await Promise.all(transactionRequests);
-        return transactions
-            .reduce((flat, it) => it ? flat.concat(it) : flat, [])
-            .sort((a, b) => a.header.height - b.header.height);
+        return {
+            transactions: transactions
+                .reduce((flat, it) => it ? flat.concat(it) : flat, [])
+                .sort((a, b) => a.header.height - b.header.height),
+            removedTxHashes
+        };
     }
 
     __consensusEstablished() {
@@ -212,23 +218,21 @@ export default class NanoNetworkApi {
     }
 
     _transactionAdded(tx) {
-        const recipientAddr = tx.recipient.toUserFriendlyAddress();
         const senderAddr = tx.sender.toUserFriendlyAddress();
-        const trackedAddresses = new Set(this._balances.keys());
+        const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        if (trackedAddresses.has(senderAddr) || trackedAddresses.has(recipientAddr)) {
-            this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64());
-        }
+        this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), tx.validityStartHeight);
+    }
+
+    _transactionExpired(tx) {
+        this._onTransactionExpired(tx.hash().toBase64());
     }
 
     _transactionMined(tx, header) {
-        const recipientAddr = tx.recipient.toUserFriendlyAddress();
         const senderAddr = tx.sender.toUserFriendlyAddress();
-        const trackedAddresses = new Set(this._balances.keys());
+        const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        if (trackedAddresses.has(recipientAddr) || trackedAddresses.has(senderAddr)) {
-            this._onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp);
-        }
+        this._onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
     _createConsensusPromise() {
@@ -312,13 +316,18 @@ export default class NanoNetworkApi {
     async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
-        let txs = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts, fromHeight)));
+        let results = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts.get(address), fromHeight)));
 
-        // txs is an array of arrays of objects, which have the format {transaction: Nimiq.Transaction, header: Nimiq.BlockHeader}
+        // txs is an array of objects of arrays, which have the format {transaction: Nimiq.Transaction, header: Nimiq.BlockHeader}
         // We need to reduce this to usable simple tx objects
+
+        // Construct arrays with their relavant information
+        let txs = results.map(r => r.transactions);
+        let removedTxs = results.map(r => r.removedTxHashes);
 
         // First, reduce
         txs = txs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+        removedTxs = removedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
 
         // Then map to simple objects
         txs = txs.map(tx => ({
@@ -329,12 +338,14 @@ export default class NanoNetworkApi {
             hash: tx.transaction.hash().toBase64(),
             blockHeight: tx.header.height,
             blockHash: tx.header.hash().toBase64(),
-            timestamp: tx.header.timestamp
+            timestamp: tx.header.timestamp,
+            validityStartHeight: tx.validityStartHeight
         }));
 
-        // Finally, sort the array
-        // return txs.sort((a, b) => a.blockHeight - b.blockHeight);
-        return txs; // Sorting is done in transaction-redux
+        return {
+            newTransactions: txs,
+            removedTransactions: removedTxs
+        };
     }
 
     async getGenesisVestingContracts() {
@@ -386,14 +397,19 @@ export default class NanoNetworkApi {
         this.fire('nimiq-balances', balances);
     }
 
-    _onTransactionPending(sender, recipient, value, fee, hash) {
-        // console.log('pending:', { sender, recipient, value, fee, hash });
-        this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, hash });
+    _onTransactionPending(sender, recipient, value, fee, hash, validityStartHeight) {
+        // console.log('pending:', { sender, recipient, value, fee, hash, validityStartHeight });
+        this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, hash, validityStartHeight });
     }
 
-    _onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp) {
-        // console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp });
-        this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp });
+    _onTransactionExpired(hash) {
+        // console.log('expired:', hash);
+        this.fire('nimiq-transaction-expired', hash);
+    }
+
+    _onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight) {
+        // console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
+        this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
     }
 
     _onDifferentTabError(e) {
