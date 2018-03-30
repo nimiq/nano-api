@@ -4,7 +4,9 @@ export default class NanoNetworkApi {
     /*
     @asset(/dist/nimiq.js)
     @asset(/dist/web.js)
+    @asset(/dist/web-babel.js)
     @asset(/dist/worker.js)
+    @asset(/dist/worker-js.js)
     @asset(/dist/worker-wasm.js)
     @asset(/dist/worker-wasm.wasm)
     */
