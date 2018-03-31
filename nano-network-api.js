@@ -33,7 +33,7 @@ export default (config) => class NanoNetworkApi {
     async connect() {
         await this._apiInitialized;
         switch (config.mode) {
-            case 'live':
+            case 'main':
                 Nimiq.GenesisConfig.main();
                 break;
             case 'bounty':
