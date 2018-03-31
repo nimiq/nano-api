@@ -1,4 +1,4 @@
-export default class NanoNetworkApi {
+export default (config) => class NanoNetworkApi {
 
     // static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
     /*
@@ -32,7 +32,20 @@ export default class NanoNetworkApi {
 
     async connect() {
         await this._apiInitialized;
-        Nimiq.GenesisConfig.bounty();
+        switch (config.mode) {
+            case 'live':
+                Nimiq.GenesisConfig.main();
+                break;
+            case 'bounty':
+                Nimiq.GenesisConfig.bounty();
+                break;
+            case 'test':
+                Nimiq.GenesisConfig.test();
+                break;
+            case 'dev':
+            default:
+                Nimiq.GenesisConfig.dev();
+        }
         this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this._onConsensusSyncing());
         this._consensus.on('established', e => this.__consensusEstablished());
@@ -450,5 +463,3 @@ export default class NanoNetworkApi {
         throw new Error('The fire() method needs to be overloaded!');
     }
 }
-
-// todo replace master by release before release!
