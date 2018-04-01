@@ -158,8 +158,10 @@ export default (config) => class NanoNetworkApi {
                 removedTxHashes: []
             };
 
-            receipts = await this._consensus._requestTransactionReceipts(address);
-            //console.log(`Received ${receipts.length} receipts from the network.`);
+            try {
+                receipts = await this._consensus._requestTransactionReceipts(address);
+                //console.log(`Received ${receipts.length} receipts from the network.`);
+            } catch(e) {}
 
             counter++;
         }
