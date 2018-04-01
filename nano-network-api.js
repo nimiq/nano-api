@@ -1,16 +1,16 @@
 export default (config) => class NanoNetworkApi {
 
-    // static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
+    static get API_URL() { return 'https://cdn.nimiq-testnet.com/nimiq.js' }
     /*
-    @asset(/dist/nimiq.js)
-    @asset(/dist/web.js)
-    @asset(/dist/web-babel.js)
-    @asset(/dist/worker.js)
-    @asset(/dist/worker-js.js)
-    @asset(/dist/worker-wasm.js)
-    @asset(/dist/worker-wasm.wasm)
+    @noasset(/dist/nimiq.js)
+    @noasset(/dist/web.js)
+    @noasset(/dist/web-babel.js)
+    @noasset(/dist/worker.js)
+    @noasset(/dist/worker-js.js)
+    @noasset(/dist/worker-wasm.js)
+    @noasset(/dist/worker-wasm.wasm)
     */
-    static get API_URL() { return '/dist/nimiq.js' }
+    // static get API_URL() { return '/dist/nimiq.js' }
     static get satoshis() { return 1e5 }
 
     static getApi() {
