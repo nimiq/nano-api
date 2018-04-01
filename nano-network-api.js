@@ -149,8 +149,20 @@ export default (config) => class NanoNetworkApi {
         // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
 
         // 1. Get transaction receipts.
-        let receipts = await this._consensus._requestTransactionReceipts(address);
-        // console.log(`Received ${receipts.length} receipts from the network.`);
+        let receipts;
+        let counter = 1;
+        while (!(receipts instanceof Array)) {
+            // Return after the 6th try
+            if (counter >= 7) return {
+                transactions: [],
+                removedTxHashes: []
+            };
+
+            receipts = await this._consensus._requestTransactionReceipts(address);
+            //console.log(`Received ${receipts.length} receipts from the network.`);
+
+            counter++;
+        }
 
         // 2 Filter out known receipts.
         const knownTxHashes = [...knownReceipts.keys()];
@@ -211,6 +223,7 @@ export default (config) => class NanoNetworkApi {
         }
 
         const transactions = await Promise.all(transactionRequests);
+
         return {
             transactions: transactions
                 .reduce((flat, it) => it ? flat.concat(it) : flat, [])
