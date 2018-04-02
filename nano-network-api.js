@@ -161,7 +161,9 @@ export default (config) => class NanoNetworkApi {
             try {
                 receipts = await this._consensus._requestTransactionReceipts(address);
                 //console.log(`Received ${receipts.length} receipts from the network.`);
-            } catch(e) {}
+            } catch(e) {
+                await new Promise(res => setTimeout(res, 1000)); // wait 1 sec until retry
+            }
 
             counter++;
         }
