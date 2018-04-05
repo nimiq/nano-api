@@ -1,4 +1,4 @@
-export default (config) => class NanoNetworkApi {
+export default (Config) => class NanoNetworkApi {
 
     static get API_URL() { return 'https://cdn.nimiq-testnet.com/nimiq.js' }
     /*
@@ -32,20 +32,9 @@ export default (config) => class NanoNetworkApi {
 
     async connect() {
         await this._apiInitialized;
-        switch (config.mode) {
-            case 'main':
-                Nimiq.GenesisConfig.main();
-                break;
-            case 'bounty':
-                Nimiq.GenesisConfig.bounty();
-                break;
-            case 'test':
-                Nimiq.GenesisConfig.test();
-                break;
-            case 'dev':
-            default:
-                Nimiq.GenesisConfig.dev();
-        }
+
+        Nimiq.GenesisConfig[Config.network]();
+
         this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this._onConsensusSyncing());
         this._consensus.on('established', e => this.__consensusEstablished());
