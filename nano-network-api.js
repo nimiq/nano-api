@@ -51,6 +51,7 @@ export default (Config) => class NanoNetworkApi {
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
+        this._consensus.mempool.on('transaction-requested', tx => this._transactionRequested(tx));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
@@ -254,6 +255,10 @@ export default (Config) => class NanoNetworkApi {
         this._onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
+    _transactionRequested(tx) {
+        this._onTransactionRequested(tx.hash().toBase64());
+    }
+
     _createConsensusPromise() {
         this._consensusEstablished = new Promise(resolve => {
             this._consensusEstablishedResolver = resolve;
@@ -429,6 +434,11 @@ export default (Config) => class NanoNetworkApi {
     _onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight) {
         // console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
         this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
+    }
+
+    _onTransactionRequested(hash) {
+        // console.log('requested:', hash);
+        this.fire('nimiq-transaction-requested', hash);
     }
 
     _onDifferentTabError(e) {
