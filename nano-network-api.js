@@ -42,6 +42,8 @@ export default (Config) => class NanoNetworkApi {
         this._consensus.on('established', e => this.__consensusEstablished());
         this._consensus.on('lost', e => this._consensusLost());
 
+        this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
+
         // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
         // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
         // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
@@ -53,7 +55,6 @@ export default (Config) => class NanoNetworkApi {
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
-        this._consensus.mempool.on('transaction-relayed', tx => this._transactionRequested(tx));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
@@ -261,11 +262,11 @@ export default (Config) => class NanoNetworkApi {
         this._onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
-    _transactionRequested(tx) {
+    _transactionRelayed(tx) {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        this._onTransactionRequested(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), tx.validityStartHeight);
+        this._onTransactionRelayed(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), tx.validityStartHeight);
     }
 
     _createConsensusPromise() {
@@ -455,9 +456,9 @@ export default (Config) => class NanoNetworkApi {
         this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
     }
 
-    _onTransactionRequested(sender, recipient, value, fee, hash, validityStartHeight) {
-        // console.log('requested:', { sender, recipient, value, fee, hash, validityStartHeight });
-        this.fire('nimiq-transaction-requested', { sender, recipient, value, fee, hash, validityStartHeight });
+    _onTransactionRelayed(sender, recipient, value, fee, hash, validityStartHeight) {
+        // console.log('relayed:', { sender, recipient, value, fee, hash, validityStartHeight });
+        this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, hash, validityStartHeight });
     }
 
     _onDifferentTabError(e) {
