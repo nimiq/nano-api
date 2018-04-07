@@ -412,22 +412,7 @@ export default (Config) => class NanoNetworkApi {
 
     async removeTxFromMempool(txObj) {
         const tx = await this._createBasicTransactionFromObject(txObj);
-
-        // Used from Nimiq.NanoMempool._evictTransactions:
-        const txHash = tx.hash();
-        if (this._consensus.mempool._transactionsByHash.contains(txHash)) {
-            this._consensus.mempool._transactionsByHash.remove(txHash);
-
-            /** @type {MempoolTransactionSet} */
-            const set = this._consensus.mempool._transactionSetByAddress.get(tx.sender);
-            set.remove(tx);
-
-            if (set.length === 0) {
-                this._consensus.mempool._transactionSetByAddress.remove(tx.sender);
-            }
-
-            // this._consensus.mempool.fire('transaction-removed', tx);
-        }
+        this._consensus.mempool.removeTransaction(tx);
     }
 
     _onInitialized() {
