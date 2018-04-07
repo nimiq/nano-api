@@ -27,6 +27,8 @@ export default (Config) => class NanoNetworkApi {
         });
         this._createConsensusPromise();
 
+        this._selfRelayedTransactionHashes = new Set();
+
         this._balances = new Map();
     }
 
@@ -48,10 +50,10 @@ export default (Config) => class NanoNetworkApi {
         this._consensus.network.connect();
 
         this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
-        this._consensus.mempool.on('transaction-added', (tx, selfRelayed) => this._transactionAdded(tx, selfRelayed));
+        this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
-        this._consensus.mempool.on('transaction-requested', tx => this._transactionRequested(tx));
+        this._consensus.mempool.on('transaction-relayed', tx => this._transactionRequested(tx));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
@@ -237,14 +239,15 @@ export default (Config) => class NanoNetworkApi {
         this._onConsensusLost();
     }
 
-    _transactionAdded(tx, selfRelayed) {
+    _transactionAdded(tx) {
         // Self-relayed transactions are added by the 'transaction-requested' event
-        if (selfRelayed) return;
+        const hash = tx.hash().toBase64();
+        if (this._selfRelayedTransactionHashes.has(hash)) return;
 
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), tx.validityStartHeight);
+        this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, hash, tx.validityStartHeight);
     }
 
     _transactionExpired(tx) {
@@ -291,6 +294,7 @@ export default (Config) => class NanoNetworkApi {
     async relayTransaction(txObj) {
         await this._consensusEstablished;
         const tx = await this._createBasicTransactionFromObject(txObj);
+        this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
         return this._consensus.relayTransaction(tx);
     }
 
