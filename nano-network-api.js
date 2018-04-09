@@ -27,6 +27,8 @@ export default (Config) => class NanoNetworkApi {
         });
         this._createConsensusPromise();
 
+        this._selfRelayedTransactionHashes = new Set();
+
         this._balances = new Map();
     }
 
@@ -40,6 +42,8 @@ export default (Config) => class NanoNetworkApi {
         this._consensus.on('established', e => this.__consensusEstablished());
         this._consensus.on('lost', e => this._consensusLost());
 
+        this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
+
         // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
         // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
         // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
@@ -51,7 +55,6 @@ export default (Config) => class NanoNetworkApi {
         this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
         this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
-        this._consensus.mempool.on('transaction-requested', tx => this._transactionRequested(tx));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
@@ -238,10 +241,14 @@ export default (Config) => class NanoNetworkApi {
     }
 
     _transactionAdded(tx) {
+        // Self-relayed transactions are added by the 'transaction-requested' event
+        const hash = tx.hash().toBase64();
+        if (this._selfRelayedTransactionHashes.has(hash)) return;
+
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), tx.validityStartHeight);
+        this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, hash, tx.validityStartHeight);
     }
 
     _transactionExpired(tx) {
@@ -255,8 +262,11 @@ export default (Config) => class NanoNetworkApi {
         this._onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
-    _transactionRequested(tx) {
-        this._onTransactionRequested(tx.hash().toBase64());
+    _transactionRelayed(tx) {
+        const senderAddr = tx.sender.toUserFriendlyAddress();
+        const recipientAddr = tx.recipient.toUserFriendlyAddress();
+
+        this._onTransactionRelayed(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), tx.validityStartHeight);
     }
 
     _createConsensusPromise() {
@@ -282,8 +292,15 @@ export default (Config) => class NanoNetworkApi {
             signature: <serialized signature>
         }
     */
-    async relayTransaction(obj) {
+    async relayTransaction(txObj) {
         await this._consensusEstablished;
+        const tx = await this._createBasicTransactionFromObject(txObj);
+        this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
+        return this._consensus.relayTransaction(tx);
+    }
+
+    async _createBasicTransactionFromObject(obj) {
+        await this._apiInitialized;
         const senderPubKey = Nimiq.PublicKey.unserialize(Nimiq.SerialBuffer.from(obj.senderPubKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
@@ -291,9 +308,7 @@ export default (Config) => class NanoNetworkApi {
         const validityStartHeight = parseInt(obj.validityStartHeight);
         const signature = Nimiq.Signature.unserialize(Nimiq.SerialBuffer.from(obj.signature));
 
-        const tx = new Nimiq.BasicTransaction(senderPubKey, recipientAddr, value, fee, validityStartHeight, signature);
-
-        return this._consensus.relayTransaction(tx);
+        return new Nimiq.BasicTransaction(senderPubKey, recipientAddr, value, fee, validityStartHeight, signature);
     }
 
     /**
@@ -396,6 +411,11 @@ export default (Config) => class NanoNetworkApi {
         return accounts;
     }
 
+    async removeTxFromMempool(txObj) {
+        const tx = await this._createBasicTransactionFromObject(txObj);
+        this._consensus.mempool.removeTransaction(tx);
+    }
+
     _onInitialized() {
         // console.log('Nimiq API ready to use');
         this.fire('nimiq-api-ready');
@@ -436,9 +456,9 @@ export default (Config) => class NanoNetworkApi {
         this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
     }
 
-    _onTransactionRequested(hash) {
-        // console.log('requested:', hash);
-        this.fire('nimiq-transaction-requested', hash);
+    _onTransactionRelayed(sender, recipient, value, fee, hash, validityStartHeight) {
+        // console.log('relayed:', { sender, recipient, value, fee, hash, validityStartHeight });
+        this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, hash, validityStartHeight });
     }
 
     _onDifferentTabError(e) {
