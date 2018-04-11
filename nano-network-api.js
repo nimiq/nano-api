@@ -237,7 +237,7 @@ export default (Config) => class NanoNetworkApi {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), NNimiq.Policy.satoshisToCoins(tx.fee), hash, tx.validityStartHeight);
+        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), hash, tx.validityStartHeight);
     }
 
     _transactionExpired(tx) {
