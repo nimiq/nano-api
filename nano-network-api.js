@@ -1,17 +1,6 @@
 export default (Config) => class NanoNetworkApi {
 
     static get API_URL() { return 'https://cdn.nimiq-testnet.com/nimiq.js' }
-    /*
-    @noasset(/dist/nimiq.js)
-    @noasset(/dist/web.js)
-    @noasset(/dist/web-babel.js)
-    @noasset(/dist/worker.js)
-    @noasset(/dist/worker-js.js)
-    @noasset(/dist/worker-wasm.js)
-    @noasset(/dist/worker-wasm.wasm)
-    */
-    // static get API_URL() { return '/dist/nimiq.js' }
-    static get satoshis() { return 1e5 }
 
     static getApi() {
         this._api = this._api || new NanoNetworkApi();
@@ -123,7 +112,7 @@ export default (Config) => class NanoNetworkApi {
 
         accounts.forEach((account, i) => {
             const address = addresses[i];
-            const balance = account ? account.balance / NanoNetworkApi.satoshis : 0 ;
+            const balance = account ? Nimiq.Policy.satoshisToCoins(account.balance) : 0 ;
             balances.set(address, balance);
         });
 
@@ -248,7 +237,7 @@ export default (Config) => class NanoNetworkApi {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        this._onTransactionPending(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, hash, tx.validityStartHeight);
+        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), NNimiq.Policy.satoshisToCoins(tx.fee), hash, tx.validityStartHeight);
     }
 
     _transactionExpired(tx) {
@@ -259,14 +248,14 @@ export default (Config) => class NanoNetworkApi {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        this._onTransactionMined(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
+        this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
     _transactionRelayed(tx) {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
-        this._onTransactionRelayed(senderAddr, recipientAddr, tx.value / NanoNetworkApi.satoshis, tx.fee / NanoNetworkApi.satoshis, tx.hash().toBase64(), tx.validityStartHeight);
+        this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.hash().toBase64(), tx.validityStartHeight);
     }
 
     _createConsensusPromise() {
@@ -372,8 +361,8 @@ export default (Config) => class NanoNetworkApi {
         txs = txs.map(tx => ({
             sender: tx.transaction.sender.toUserFriendlyAddress(),
             recipient: tx.transaction.recipient.toUserFriendlyAddress(),
-            value: tx.transaction.value / NanoNetworkApi.satoshis,
-            fee: tx.transaction.fee / NanoNetworkApi.satoshis,
+            value: Nimiq.Policy.satoshisToCoins(tx.transaction.value),
+            fee: Nimiq.Policy.satoshisToCoins(tx.transaction.fee),
             hash: tx.transaction.hash().toBase64(),
             blockHeight: tx.header.height,
             blockHash: tx.header.hash().toBase64(),
@@ -399,12 +388,12 @@ export default (Config) => class NanoNetworkApi {
             if (account.type === 1) {
                 accounts.push({
                     address: address.toUserFriendlyAddress(),
-                    // balance: account.balance / NanoNetworkApi.satoshis,
+                    // balance: Nimiq.Policy.satoshisToCoins(account.balance),
                     owner: account.owner.toUserFriendlyAddress(),
                     start: account.vestingStart,
-                    stepAmount: account.vestingStepAmount / NanoNetworkApi.satoshis,
+                    stepAmount: Nimiq.Policy.satoshisToCoins(account.vestingStepAmount),
                     stepBlocks: account.vestingStepBlocks,
-                    totalAmount: account.vestingTotalAmount / NanoNetworkApi.satoshis
+                    totalAmount: Nimiq.Policy.satoshisToCoins(account.vestingTotalAmount)
                 });
             }
         }
