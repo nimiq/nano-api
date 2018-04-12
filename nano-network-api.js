@@ -290,12 +290,12 @@ export default (Config) => class NanoNetworkApi {
 
     async _createBasicTransactionFromObject(obj) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(Nimiq.SerialBuffer.from(obj.senderPubKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
         const validityStartHeight = parseInt(obj.validityStartHeight);
-        const signature = Nimiq.Signature.unserialize(Nimiq.SerialBuffer.from(obj.signature));
+        const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
 
         return new Nimiq.BasicTransaction(senderPubKey, recipientAddr, value, fee, validityStartHeight, signature);
     }
