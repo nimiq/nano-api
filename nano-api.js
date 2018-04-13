@@ -1,8 +1,9 @@
 import ValidationUtils from '/libraries/secure-utils/validation-utils/validation-utils.js';
+import Config from '/libraries/secure-utils/config/config.js';
 
 export default class NanoApi {
 
-    static get API_URL() { return 'https://cdn.nimiq-network.com/branches/master/nimiq.js' }
+    static get API_URL() { return Config.cdn; }
     static get satoshis() { return 1e5 }
 
     static getApi() {

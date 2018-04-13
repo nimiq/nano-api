@@ -1,6 +1,6 @@
 export default (Config) => class NanoNetworkApi {
 
-    static get API_URL() { return 'https://cdn.nimiq-testnet.com/nimiq.js' }
+    static get API_URL() { return Config.cdn }
 
     static getApi() {
         this._api = this._api || new NanoNetworkApi();
