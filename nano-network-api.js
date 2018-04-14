@@ -173,7 +173,7 @@ export default (Config) => class NanoNetworkApi {
                 } else {
                     const request = this._consensus._requestBlockProof(receipt.blockHash, receipt.blockHeight)
                         .catch(e => console.error(NanoNetworkApi, `Failed to retrieve proof for block ${receipt.blockHash}`
-                            + ` (${e.message || e}) - transaction history may be incomplete`));
+                            + ` (${e}) - transaction history may be incomplete`));
                     blockRequests.push(request);
                 }
 
@@ -189,8 +189,8 @@ export default (Config) => class NanoNetworkApi {
 
             const request = this._consensus._requestTransactionsProof([address], block)
                 .then(txs => txs.map(tx => ({ transaction: tx, header: block.header })))
-                .catch(e => console.error(NanoNetworkApi, `Failed to retrieve transactions for block ${block.hash}`
-                    + ` (${e.message || e}) - transaction history may be incomplete`));
+                .catch(e => console.error(NanoNetworkApi, `Failed to retrieve transactions for block ${block.hash()}`
+                    + ` (${e}) - transaction history may be incomplete`));
             transactionRequests.push(request);
         }
 
