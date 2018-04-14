@@ -49,19 +49,7 @@ export default (Config) => class NanoNetworkApi {
 
     async _headChanged(header) {
         if (!this._consensus.established) return;
-        const balances = await this._getBalances([...this._balances.keys()]);
-
-        for (const [address, balance] of balances) {
-            if (this._balances.get(address) === balance) {
-                balances.delete(address);
-                continue;
-            }
-
-            this._balances.set(address, balance);
-        }
-
-        if (balances.size) this._onBalancesChanged(balances);
-
+        this._recheckBalances();
         this._onHeadChange(header);
     }
 
@@ -94,8 +82,6 @@ export default (Config) => class NanoNetworkApi {
      * @param {Array<string>} addresses
      */
     async _subscribeAddresses(addresses) {
-        addresses.forEach(address => this._balances.set(address, 0));
-
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
         await this._consensusEstablished;
         this._consensus.subscribeAccounts(addressesAsAddresses);
@@ -112,7 +98,7 @@ export default (Config) => class NanoNetworkApi {
 
         accounts.forEach((account, i) => {
             const address = addresses[i];
-            const balance = account ? Nimiq.Policy.satoshisToCoins(account.balance) : 0 ;
+            const balance = account ? Nimiq.Policy.satoshisToCoins(account.balance) : 0;
             balances.set(address, balance);
         });
 
@@ -237,10 +223,18 @@ export default (Config) => class NanoNetworkApi {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
+        // Handle tx amount when the sender is own account
+        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
+
         this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), hash, tx.validityStartHeight);
     }
 
     _transactionExpired(tx) {
+        const senderAddr = tx.sender.toUserFriendlyAddress();
+
+        // Handle tx amount when the sender is own account
+        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
+
         this._onTransactionExpired(tx.hash().toBase64());
     }
 
@@ -248,12 +242,18 @@ export default (Config) => class NanoNetworkApi {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
+        // Handle tx amount when the sender is own account
+        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
+
         this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
     _transactionRelayed(tx) {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
+
+        // Handle tx amount when the sender is own account
+        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
         this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.hash().toBase64(), tx.validityStartHeight);
     }
@@ -266,6 +266,33 @@ export default (Config) => class NanoNetworkApi {
 
     _globalHashrate(difficulty) {
         return Math.round(difficulty * Math.pow(2, 16) / Nimiq.Policy.BLOCK_TIME);
+    }
+
+    async _recheckBalances(addresses) {
+        if (!addresses) addresses = [...this._balances.keys()];
+        if (!(addresses instanceof Array)) addresses = [addresses];
+
+        const balances = await this._getBalances(addresses);
+
+        for (let [address, balance] of balances) {
+            balance -= this._getPendingAmount(address);
+
+            if (this._balances.get(address) === balance) {
+                balances.delete(address);
+                continue;
+            }
+
+            balances.set(address, balance);
+            this._balances.set(address, balance);
+        }
+
+        if (balances.size) this._onBalancesChanged(balances);
+    }
+
+    _getPendingAmount(address) {
+        const txs = this._consensus.mempool.getPendingTransactions(Nimiq.Address.fromUserFriendlyAddress(address));
+        const pendingAmount = txs.reduce((acc, tx) => acc + Nimiq.Policy.satoshisToCoins(tx.value + tx.fee), 0);
+        return pendingAmount;
     }
 
     /*
@@ -305,13 +332,8 @@ export default (Config) => class NanoNetworkApi {
      */
     async subscribe(addresses) {
         if (!(addresses instanceof Array)) addresses = [addresses];
-
         this._subscribeAddresses(addresses);
-
-        const balances = await this._getBalances(addresses);
-        for (const [address, balance] of balances) { this._balances.set(address, balance); }
-
-        this._onBalancesChanged(balances);
+        this._recheckBalances(addresses);
     }
 
     /**
