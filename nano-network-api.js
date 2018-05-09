@@ -315,8 +315,7 @@ export default (Config) => class NanoNetworkApi {
         let tx;
         if (txObj.extraData && txObj.extraData.length > 0) {
             tx = await this._createExtendedTransactionFromObject(txObj);
-        }
-        else {
+        } else {
             tx = await this._createBasicTransactionFromObject(txObj);
         }
         // console.log("Debug: transaction size was:", tx.serializedSize);
@@ -329,8 +328,7 @@ export default (Config) => class NanoNetworkApi {
         let tx;
         if (txObj.extraData && txObj.extraData.length > 0) {
             tx = await this._createExtendedTransactionFromObject(txObj);
-        }
-        else {
+        } else {
             tx = await this._createBasicTransactionFromObject(txObj);
         }
         return tx.serializedSize;
