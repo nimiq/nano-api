@@ -1,3 +1,5 @@
+import Utf8Tools from '/libraries/secure-utils/utf8-tools/utf8-tools.js';
+
 export default (Config) => class NanoNetworkApi {
 
     static get API_URL() { return Config.cdn }
@@ -226,7 +228,7 @@ export default (Config) => class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), hash, tx.validityStartHeight);
+        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), Utf8Tools.utf8ByteArrayToString(tx.data), hash, tx.validityStartHeight);
     }
 
     _transactionExpired(tx) {
@@ -245,7 +247,7 @@ export default (Config) => class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
+        this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), Utf8Tools.utf8ByteArrayToString(tx.data), tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
     _transactionRelayed(tx) {
@@ -255,7 +257,7 @@ export default (Config) => class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.hash().toBase64(), tx.validityStartHeight);
+        this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), Utf8Tools.utf8ByteArrayToString(tx.data), tx.hash().toBase64(), tx.validityStartHeight);
     }
 
     _createConsensusPromise() {
@@ -310,9 +312,28 @@ export default (Config) => class NanoNetworkApi {
     */
     async relayTransaction(txObj) {
         await this._consensusEstablished;
-        const tx = await this._createBasicTransactionFromObject(txObj);
+        let tx;
+        if (txObj.extraData && txObj.extraData.length > 0) {
+            tx = await this._createExtendedTransactionFromObject(txObj);
+        }
+        else {
+            tx = await this._createBasicTransactionFromObject(txObj);
+        }
+        // console.log("Debug: transaction size was:", tx.serializedSize);
         this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
         return this._consensus.relayTransaction(tx);
+    }
+
+    async getTransactionSize(txObj) {
+        await this._apiInitialized;
+        let tx;
+        if (txObj.extraData && txObj.extraData.length > 0) {
+            tx = await this._createExtendedTransactionFromObject(txObj);
+        }
+        else {
+            tx = await this._createBasicTransactionFromObject(txObj);
+        }
+        return tx.serializedSize;
     }
 
     async _createBasicTransactionFromObject(obj) {
@@ -325,6 +346,32 @@ export default (Config) => class NanoNetworkApi {
         const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
 
         return new Nimiq.BasicTransaction(senderPubKey, recipientAddr, value, fee, validityStartHeight, signature);
+    }
+
+    async _createExtendedTransactionFromObject(obj) {
+        await this._apiInitialized;
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const senderAddr = senderPubKey.toAddress();
+        const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
+        const value = Nimiq.Policy.coinsToSatoshis(obj.value);
+        const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
+        const validityStartHeight = parseInt(obj.validityStartHeight);
+        const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
+        const data = Utf8Tools.stringToUtf8ByteArray(obj.extraData);
+
+        const proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature);
+        const serializedProof = proof.serialize();
+
+        return new Nimiq.ExtendedTransaction(
+            senderAddr,    Nimiq.Account.Type.BASIC,
+            recipientAddr, Nimiq.Account.Type.BASIC,
+            value,
+            fee,
+            validityStartHeight,
+            Nimiq.Transaction.Flag.NONE,
+            data,
+            serializedProof
+        );
     }
 
     /**
@@ -385,6 +432,7 @@ export default (Config) => class NanoNetworkApi {
             recipient: tx.transaction.recipient.toUserFriendlyAddress(),
             value: Nimiq.Policy.satoshisToCoins(tx.transaction.value),
             fee: Nimiq.Policy.satoshisToCoins(tx.transaction.fee),
+            extraData: Utf8Tools.utf8ByteArrayToString(tx.transaction.data),
             hash: tx.transaction.hash().toBase64(),
             blockHeight: tx.header.height,
             blockHash: tx.header.hash().toBase64(),
@@ -452,9 +500,9 @@ export default (Config) => class NanoNetworkApi {
         this.fire('nimiq-balances', balances);
     }
 
-    _onTransactionPending(sender, recipient, value, fee, hash, validityStartHeight) {
-        // console.log('pending:', { sender, recipient, value, fee, hash, validityStartHeight });
-        this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, hash, validityStartHeight });
+    _onTransactionPending(sender, recipient, value, fee, extraData, hash, validityStartHeight) {
+        // console.log('pending:', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
+        this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
     }
 
     _onTransactionExpired(hash) {
@@ -462,14 +510,14 @@ export default (Config) => class NanoNetworkApi {
         this.fire('nimiq-transaction-expired', hash);
     }
 
-    _onTransactionMined(sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight) {
-        // console.log('mined:', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
-        this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, hash, blockHeight, timestamp, validityStartHeight });
+    _onTransactionMined(sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight) {
+        // console.log('mined:', { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
+        this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
     }
 
-    _onTransactionRelayed(sender, recipient, value, fee, hash, validityStartHeight) {
-        // console.log('relayed:', { sender, recipient, value, fee, hash, validityStartHeight });
-        this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, hash, validityStartHeight });
+    _onTransactionRelayed(sender, recipient, value, fee, extraData, hash, validityStartHeight) {
+        // console.log('relayed:', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
+        this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
     }
 
     _onDifferentTabError(e) {
