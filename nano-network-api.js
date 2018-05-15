@@ -121,16 +121,24 @@ export default (Config) => class NanoNetworkApi {
         // 1. Get transaction receipts.
         let receipts;
         let counter = 1;
+
         while (!(receipts instanceof Array)) {
-            // Return after the 6th try
-            if (counter >= 7) return {
+            // Return after the 3rd try
+            if (counter >= 4) return {
                 transactions: [],
                 removedTxHashes: []
             };
 
+            let newReceipts;
+            let newReceiptsList = [];
+
             try {
-                receipts = await this._consensus._requestTransactionReceipts(address);
-                //console.log(`Received ${receipts.length} receipts from the network.`);
+                do {
+                    newReceipts = await this._consensus._requestTransactionReceipts(address, newReceiptsList.length);
+                    //console.log(`Received ${receipts.length} receipts from the network.`);
+                    newReceiptsList = newReceiptsList.concat(newReceipts);
+                } while (newReceipts.length === Nimiq.TransactionReceiptsMessage.RECEIPTS_MAX_COUNT);
+                receipts = newReceiptsList;
             } catch(e) {
                 await new Promise(res => setTimeout(res, 1000)); // wait 1 sec until retry
             }
