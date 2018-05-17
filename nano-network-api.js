@@ -120,11 +120,11 @@ export default (Config) => class NanoNetworkApi {
 
         // 1. Get transaction receipts.
         let receipts;
-        let counter = 1;
+        let retryCounter = 1;
 
         while (!(receipts instanceof Array)) {
             // Return after the 3rd try
-            if (counter >= 4) return {
+            if (retryCounter >= 4) return {
                 transactions: [],
                 removedTxHashes: []
             };
@@ -135,7 +135,7 @@ export default (Config) => class NanoNetworkApi {
             try {
                 do {
                     newReceipts = await this._consensus._requestTransactionReceipts(address, newReceiptsList.length);
-                    //console.log(`Received ${receipts.length} receipts from the network.`);
+                    console.log(`Received ${newReceipts.length} receipts from the network.`);
                     newReceiptsList = newReceiptsList.concat(newReceipts);
                 } while (newReceipts.length === Nimiq.TransactionReceiptsMessage.RECEIPTS_MAX_COUNT);
                 receipts = newReceiptsList;
@@ -143,7 +143,7 @@ export default (Config) => class NanoNetworkApi {
                 await new Promise(res => setTimeout(res, 1000)); // wait 1 sec until retry
             }
 
-            counter++;
+            retryCounter++;
         }
 
         // 2 Filter out known receipts.
@@ -165,10 +165,13 @@ export default (Config) => class NanoNetworkApi {
 
             // Unknown transaction
             return true;
-        });
-        // console.log(`Reduced to ${receipts.length} unknown receipts.`);
+        })
+        // Sort in reverse, to resolve recent transactions first
+        .sort((a, b) => b.blockHeight - a.blockHeight);
 
-        // FIXME TODO: Check for tx that have been removed from the blockchain!
+        console.log(`Reduced to ${receipts.length} unknown receipts.`);
+
+        const unresolvedReceipts = [];
 
         // 3. Request proofs for missing blocks.
         /** @type {Array.<Promise.<Block>>} */
@@ -182,8 +185,11 @@ export default (Config) => class NanoNetworkApi {
                     blockRequests.push(Promise.resolve(block));
                 } else {
                     const request = this._consensus._requestBlockProof(receipt.blockHash, receipt.blockHeight)
-                        .catch(e => console.error(NanoNetworkApi, `Failed to retrieve proof for block ${receipt.blockHash}`
-                            + ` (${e}) - transaction history may be incomplete`));
+                        .catch(e => {
+                            unresolvedReceipts.push(receipt);
+                            console.error(NanoNetworkApi, `Failed to retrieve proof for block ${receipt.blockHash}`
+                            + ` (${e}) - transaction history may be incomplete`)
+                        });
                     blockRequests.push(request);
                 }
 
@@ -191,6 +197,9 @@ export default (Config) => class NanoNetworkApi {
             }
         }
         const blocks = await Promise.all(blockRequests);
+
+        console.log(`Transactions are in ${blocks.length} blocks`);
+        console.log(`Could not get block for ${unresolvedReceipts.length} receipts`);
 
         // 4. Request transaction proofs.
         const transactionRequests = [];
@@ -206,11 +215,16 @@ export default (Config) => class NanoNetworkApi {
 
         const transactions = await Promise.all(transactionRequests);
 
+        // Reverse array, so that oldest transactions are first
+        transactions.reverse();
+        unresolvedReceipts.reverse();
+
         return {
             transactions: transactions
                 .reduce((flat, it) => it ? flat.concat(it) : flat, [])
-                .sort((a, b) => a.header.height - b.header.height),
-            removedTxHashes
+                /*.sort((a, b) => a.header.height - b.header.height)*/,
+            removedTxHashes,
+            unresolvedReceipts
         };
     }
 
@@ -427,10 +441,12 @@ export default (Config) => class NanoNetworkApi {
         // Construct arrays with their relavant information
         let txs = results.map(r => r.transactions);
         let removedTxs = results.map(r => r.removedTxHashes);
+        let unresolvedTxs = results.map(r => r.unresolvedReceipts);
 
         // First, reduce
         txs = txs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
         removedTxs = removedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+        unresolvedTxs = unresolvedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
 
         // Then map to simple objects
         txs = txs.map(tx => ({
@@ -448,7 +464,8 @@ export default (Config) => class NanoNetworkApi {
 
         return {
             newTransactions: txs,
-            removedTransactions: removedTxs
+            removedTransactions: removedTxs,
+            unresolvedTransactions: unresolvedTxs
         };
     }
 
