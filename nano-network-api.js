@@ -138,12 +138,21 @@ export default (Config) => class NanoNetworkApi {
             retryCounter++;
         }
 
-        // 2 Filter out known receipts.
+        // 2a. Filter out removed transactions
         const knownTxHashes = [...knownReceipts.keys()];
-        const receiptTxHashes = receipts.map(r => r.transactionHash.toBase64());
 
-        const removedTxHashes = knownTxHashes.filter(knownTxHash => !receiptTxHashes.includes(knownTxHash));
+        // The JungleDB does currently not support TransactionReceiptsMessage's offset parameter.
+        // Thus, when the limit is returned, we can make no assumption about removed transactions.
+        // TODO: FIXME when offset is enabled
+        let removedTxHashes = [];
+        if (receipts.length === Nimiq.TransactionReceiptsMessage.RECEIPTS_MAX_COUNT) {
+            console.warn('Maximum number of receipts returned, cannot determine removed transactions. Transaction history is likely incomplete.');
+        } else {
+            const receiptTxHashes = receipts.map(r => r.transactionHash.toBase64());
+            removedTxHashes = knownTxHashes.filter(knownTxHash => !receiptTxHashes.includes(knownTxHash));
+        }
 
+        // 2b. Filter out known receipts.
         receipts = receipts.filter(receipt => {
             if (receipt.blockHeight < fromHeight) return false;
 
