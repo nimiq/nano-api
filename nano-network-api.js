@@ -505,17 +505,17 @@ export default (Config) => class NanoNetworkApi {
     }
 
     _onConsensusSyncing() {
-        // console.log('consensus syncing');
+        console.log('consensus syncing');
         this.fire('nimiq-consensus-syncing');
     }
 
     _onConsensusEstablished() {
-        // console.log('consensus established');
+        console.log('consensus established');
         this.fire('nimiq-consensus-established');
     }
 
     _onConsensusLost() {
-        // console.log('consensus lost');
+        console.log('consensus lost');
         this.fire('nimiq-consensus-lost');
     }
 
@@ -540,7 +540,7 @@ export default (Config) => class NanoNetworkApi {
     }
 
     _onTransactionRelayed(sender, recipient, value, fee, extraData, hash, validityStartHeight) {
-        // console.log('relayed:', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
+        console.log('relayed:', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
         this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
     }
 
