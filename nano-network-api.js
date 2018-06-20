@@ -12,8 +12,14 @@ export default (Config) => class NanoNetworkApi {
     constructor() {
         this._apiInitialized = new Promise(async (resolve) => {
             await NanoNetworkApi._importApi();
-            await Nimiq.load();
+            try {
+                await Nimiq.load();
+            } catch (e) {
+                _onInitializationError(e.message || e);
+                return; // Do not resolve promise
+            }
             // setTimeout(resolve, 500);
+            this._onInitialized();
             resolve();
         });
         this._createConsensusPromise();
@@ -550,7 +556,7 @@ export default (Config) => class NanoNetworkApi {
     }
 
     _onInitializationError(e) {
-        // console.log('Nimiq API could not be initialized:', e);
+        console.error('Nimiq API could not be initialized:', e);
         this.fire('nimiq-api-fail', e);
     }
 
