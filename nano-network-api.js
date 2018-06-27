@@ -342,7 +342,9 @@ export default (Config) => class NanoNetworkApi {
     async relayTransaction(txObj) {
         await this._consensusEstablished;
         let tx;
-        if (txObj.extraData && txObj.extraData.length > 0) {
+        if (txObj.isVesting) {
+            tx = await this._createVestingTransactionFromObject(txObj);
+        } else if (txObj.extraData && txObj.extraData.length > 0) {
             tx = await this._createExtendedTransactionFromObject(txObj);
         } else {
             tx = await this._createBasicTransactionFromObject(txObj);
@@ -391,6 +393,32 @@ export default (Config) => class NanoNetworkApi {
 
         return new Nimiq.ExtendedTransaction(
             senderAddr,    Nimiq.Account.Type.BASIC,
+            recipientAddr, Nimiq.Account.Type.BASIC,
+            value,
+            fee,
+            validityStartHeight,
+            Nimiq.Transaction.Flag.NONE,
+            data,
+            serializedProof
+        );
+    }
+
+    async _createVestingTransactionFromObject(obj) {
+        await this._apiInitialized;
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const recipientAddr = senderPubKey.toAddress();
+        const senderAddr = Nimiq.Address.fromUserFriendlyAddress(obj.sender);
+        const value = Nimiq.Policy.coinsToSatoshis(obj.value);
+        const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
+        const validityStartHeight = parseInt(obj.validityStartHeight);
+        const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
+        const data = Utf8Tools.stringToUtf8ByteArray(obj.extraData);
+
+        const proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature);
+        const serializedProof = proof.serialize();
+
+        return new Nimiq.ExtendedTransaction(
+            senderAddr,    Nimiq.Account.Type.VESTING,
             recipientAddr, Nimiq.Account.Type.BASIC,
             value,
             fee,
