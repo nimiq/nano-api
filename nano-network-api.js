@@ -497,6 +497,12 @@ export default (Config) => class NanoNetworkApi {
             validityStartHeight: tx.validityStartHeight
         }));
 
+        // Remove duplicate txs
+        const _txHashes = txs.map(tx => tx.hash);
+        txs = txs.filter((tx, index) => {
+            return _txHashes.indexOf(tx.hash) === index;
+        });
+
         return {
             newTransactions: txs,
             removedTransactions: removedTxs,
