@@ -257,7 +257,7 @@ export default (Config) => class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), Utf8Tools.utf8ByteArrayToString(tx.data), hash, tx.validityStartHeight);
+        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, hash, tx.validityStartHeight);
     }
 
     _transactionExpired(tx) {
@@ -276,7 +276,7 @@ export default (Config) => class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), Utf8Tools.utf8ByteArrayToString(tx.data), tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
+        this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
     _transactionRelayed(tx) {
@@ -286,7 +286,7 @@ export default (Config) => class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), Utf8Tools.utf8ByteArrayToString(tx.data), tx.hash().toBase64(), tx.validityStartHeight);
+        this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, tx.hash().toBase64(), tx.validityStartHeight);
     }
 
     _createConsensusPromise() {
@@ -342,6 +342,11 @@ export default (Config) => class NanoNetworkApi {
     async relayTransaction(txObj) {
         await this._consensusEstablished;
         let tx;
+
+        if (typeof txObj.extraData === 'string') {
+            txObj.extraData = Utf8Tools.stringToUtf8ByteArray(txObj.extraData);
+        }
+
         if (txObj.isVesting) {
             tx = await this._createVestingTransactionFromObject(txObj);
         } else if (txObj.extraData && txObj.extraData.length > 0) {
@@ -386,7 +391,7 @@ export default (Config) => class NanoNetworkApi {
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
         const validityStartHeight = parseInt(obj.validityStartHeight);
         const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
-        const data = Utf8Tools.stringToUtf8ByteArray(obj.extraData);
+        const data = obj.extraData;
 
         const proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature);
         const serializedProof = proof.serialize();
@@ -412,7 +417,7 @@ export default (Config) => class NanoNetworkApi {
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
         const validityStartHeight = parseInt(obj.validityStartHeight);
         const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
-        const data = Utf8Tools.stringToUtf8ByteArray(obj.extraData);
+        const data = obj.extraData;
 
         const proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature);
         const serializedProof = proof.serialize();
@@ -489,7 +494,7 @@ export default (Config) => class NanoNetworkApi {
             recipient: tx.transaction.recipient.toUserFriendlyAddress(),
             value: Nimiq.Policy.satoshisToCoins(tx.transaction.value),
             fee: Nimiq.Policy.satoshisToCoins(tx.transaction.fee),
-            extraData: Utf8Tools.utf8ByteArrayToString(tx.transaction.data),
+            extraData: tx.transaction.data,
             hash: tx.transaction.hash().toBase64(),
             blockHeight: tx.header.height,
             blockHash: tx.header.hash().toBase64(),
