@@ -1,0 +1,24 @@
+{
+  "name": "@nimiq/nano-api",
+  "version": "0.0.1",
+  "description": "Nano Network API",
+  "main": "dist/nano-network-api.common.js",
+  "module": "dist/nano-network-api.umd.js",
+  "repository": "git@github.com:nimiq/nano-api.git",
+  "author": "Nimiq",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@nimiq/utils": "^0.0.1"
+  },
+  "devDependencies": {
+    "rollup": "^0.65.0",
+    "rollup-plugin-node-resolve": "^3.3.0"
+  }
+}

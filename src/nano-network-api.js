@@ -1,6 +1,9 @@
-import Utf8Tools from '/libraries/secure-utils/utf8-tools/utf8-tools.js';
+import {Utf8Tools} from '@nimiq/utils/src/utf8-tools/utf8-tools';
+import {Config} from '@nimiq/utils/src/config/config';
 
-export default (Config) => class NanoNetworkApi {
+export {Config};
+
+export class NanoNetworkApi {
 
     static get API_URL() { return Config.cdn }
 
