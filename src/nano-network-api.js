@@ -1,24 +1,18 @@
 import {Utf8Tools} from '@nimiq/utils/src/utf8-tools/utf8-tools';
-import {Config} from '@nimiq/utils/src/config/config';
-
-export {Config};
 
 export class NanoNetworkApi {
 
-    static get API_URL() { return Config.cdn }
-
-    static getApi() {
-        this._api = this._api || new NanoNetworkApi();
-        return this._api;
-    }
-
-    constructor() {
+    /**
+     * @param {{cdn:string, network:string}} config
+     */
+    constructor(config) {
+        this._config = config;
         this._apiInitialized = new Promise(async (resolve) => {
-            await NanoNetworkApi._importApi();
+            await this._importApi();
             try {
                 await Nimiq.load();
             } catch (e) {
-                _onInitializationError(e.message || e);
+                this._onInitializationError(e.message || e);
                 return; // Do not resolve promise
             }
             // setTimeout(resolve, 500);
@@ -32,10 +26,12 @@ export class NanoNetworkApi {
         this._balances = new Map();
     }
 
+    get apiUrl() { return this._config.cdn }
+
     async connect() {
         await this._apiInitialized;
 
-        Nimiq.GenesisConfig[Config.network]();
+        Nimiq.GenesisConfig[this._config.network]();
 
         this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this._onConsensusSyncing());
@@ -615,11 +611,11 @@ export class NanoNetworkApi {
         this.fire('nimiq-peer-count', this._consensus.network.peerCount);
     }
 
-    static _importApi() {
+    _importApi() {
         return new Promise((resolve, reject) => {
             let script = document.createElement('script');
             script.type = 'text/javascript';
-            script.src = NanoNetworkApi.API_URL;
+            script.src = this.apiUrl;
             script.addEventListener('load', () => resolve(script), false);
             script.addEventListener('error', () => reject(script), false);
             document.body.appendChild(script);
