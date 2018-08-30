@@ -11,8 +11,7 @@
     "build": "rollup -c"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "dependencies": {
     "@nimiq/utils": "^0.0.2"
