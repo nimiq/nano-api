@@ -1,5 +1,5 @@
 // rollup.config.js
-import resolve from 'rollup-plugin-node-resolve';
+const dependencies = Object.keys(require('./package.json').dependencies);
 
 export default [
     {
@@ -8,9 +8,7 @@ export default [
             file: 'dist/nano-network-api.common.js',
             format: 'cjs'
         },
-        plugins: [
-            resolve()
-        ]
+        external: dependencies
     },
     {
         input: 'src/nano-network-api.js',
@@ -18,10 +16,19 @@ export default [
             file: 'dist/nano-network-api.umd.js',
             format: 'umd',
             name: 'window',
-            extend: true
+            extend: true,
+            globals: {
+                '@nimiq/utils': 'window'
+            }
         },
-        plugins: [
-            resolve()
-        ]
+        external: dependencies
+    },
+    {
+        input: 'src/nano-network-api.js',
+        output: {
+            file: 'dist/nano-network-api.es.js',
+            format: 'es'
+        },
+        external: dependencies
     }
 ];

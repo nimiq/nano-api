@@ -1,4 +1,4 @@
-import {Utf8Tools} from '@nimiq/utils/src/utf8-tools/utf8-tools';
+import {Utf8Tools} from '@nimiq/utils';
 
 export class NanoNetworkApi {
 
