@@ -28,6 +28,52 @@ export class NanoNetworkApi {
 
     get apiUrl() { return this._config.cdn }
 
+    fire(event, data) {
+        throw new Error('The fire() method needs to be overloaded!');
+    }
+
+    /**
+     *  @param {Object} txObj: {
+     *         sender: <user friendly address>,
+     *         senderPubKey: <serialized public key>,
+     *         recipient: <user friendly address>,
+     *         value: <value in NIM>,
+     *         fee: <fee in NIM>,
+     *         validityStartHeight: <integer>,
+     *         signature: <serialized signature> 
+     *  }
+     */
+    async relayTransaction(txObj) {
+        await this._consensusEstablished;
+        let tx;
+
+        if (typeof txObj.extraData === 'string') {
+            txObj.extraData = Utf8Tools.stringToUtf8ByteArray(txObj.extraData);
+        }
+
+        if (txObj.isVesting) {
+            tx = await this._createVestingTransactionFromObject(txObj);
+        } else if (txObj.extraData && txObj.extraData.length > 0) {
+            tx = await this._createExtendedTransactionFromObject(txObj);
+        } else {
+            tx = await this._createBasicTransactionFromObject(txObj);
+        }
+        // console.log("Debug: transaction size was:", tx.serializedSize);
+        this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
+        return this._consensus.relayTransaction(tx);
+    }
+
+    async getTransactionSize(txObj) {
+        await this._apiInitialized;
+        let tx;
+        if (txObj.extraData && txObj.extraData.length > 0) {
+            tx = await this._createExtendedTransactionFromObject(txObj);
+        } else {
+            tx = await this._createBasicTransactionFromObject(txObj);
+        }
+        return tx.serializedSize;
+    }
+
     async connect() {
         await this._apiInitialized;
 
@@ -52,6 +98,116 @@ export class NanoNetworkApi {
         this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
+    }
+
+     /**
+     * @param {string|Array<string>} addresses
+     */
+    async subscribe(addresses) {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+        this._subscribeAddresses(addresses);
+        this._recheckBalances(addresses);
+    }
+
+    /**
+     * @param {string|Array<string>} addresses
+     * @returns {Map}
+     */
+    getBalance(addresses) {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+
+        const balances = this._getBalances(addresses);
+        for (const [address, balance] of balances) { this._balances.set(address, balance); }
+
+        return balances;
+    }
+
+    async getAccountTypeString(address) {
+        const account = (await this._getAccounts([address]))[0];
+
+        if (!account) return 'basic';
+
+        // See Nimiq.Account.Type
+        switch (account.type) {
+            case Nimiq.Account.Type.BASIC: return 'basic';
+            case Nimiq.Account.Type.VESTING: return 'vesting';
+            case Nimiq.Account.Type.HTLC: return 'htlc';
+            default: return false;
+        }
+    }
+
+    async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+
+        let results = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts.get(address), fromHeight)));
+
+        // txs is an array of objects of arrays, which have the format {transaction: Nimiq.Transaction, header: Nimiq.BlockHeader}
+        // We need to reduce this to usable simple tx objects
+
+        // Construct arrays with their relavant information
+        let txs = results.map(r => r.transactions);
+        let removedTxs = results.map(r => r.removedTxHashes);
+        let unresolvedTxs = results.map(r => r.unresolvedReceipts);
+
+        // First, reduce
+        txs = txs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+        removedTxs = removedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+        unresolvedTxs = unresolvedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+
+        // Then map to simple objects
+        txs = txs.map(tx => ({
+            sender: tx.transaction.sender.toUserFriendlyAddress(),
+            recipient: tx.transaction.recipient.toUserFriendlyAddress(),
+            value: Nimiq.Policy.satoshisToCoins(tx.transaction.value),
+            fee: Nimiq.Policy.satoshisToCoins(tx.transaction.fee),
+            extraData: tx.transaction.data,
+            hash: tx.transaction.hash().toBase64(),
+            blockHeight: tx.header.height,
+            blockHash: tx.header.hash().toBase64(),
+            timestamp: tx.header.timestamp,
+            validityStartHeight: tx.validityStartHeight
+        }));
+
+        // Remove duplicate txs
+        const _txHashes = txs.map(tx => tx.hash);
+        txs = txs.filter((tx, index) => {
+            return _txHashes.indexOf(tx.hash) === index;
+        });
+
+        return {
+            newTransactions: txs,
+            removedTransactions: removedTxs,
+            unresolvedTransactions: unresolvedTxs
+        };
+    }
+
+    async getGenesisVestingContracts() {
+        await this._apiInitialized;
+        const accounts = [];
+        const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
+        const count = buf.readUint16();
+        for (let i = 0; i < count; i++) {
+            const address = Nimiq.Address.unserialize(buf);
+            const account = Nimiq.Account.unserialize(buf);
+
+            if (account.type === 1) {
+                accounts.push({
+                    address: address.toUserFriendlyAddress(),
+                    // balance: Nimiq.Policy.satoshisToCoins(account.balance),
+                    owner: account.owner.toUserFriendlyAddress(),
+                    start: account.vestingStart,
+                    stepAmount: Nimiq.Policy.satoshisToCoins(account.vestingStepAmount),
+                    stepBlocks: account.vestingStepBlocks,
+                    totalAmount: Nimiq.Policy.satoshisToCoins(account.vestingTotalAmount)
+                });
+            }
+        }
+        return accounts;
+    }
+
+    async removeTxFromMempool(txObj) {
+        const tx = await this._createBasicTransactionFromObject(txObj);
+        this._consensus.mempool.removeTransaction(tx);
     }
 
     async _headChanged(header) {
@@ -325,49 +481,7 @@ export class NanoNetworkApi {
         return pendingAmount;
     }
 
-    /*
-        Public API
 
-        @param {Object} obj: {
-            sender: <user friendly address>,
-            senderPubKey: <serialized public key>,
-            recipient: <user friendly address>,
-            value: <value in NIM>,
-            fee: <fee in NIM>,
-            validityStartHeight: <integer>,
-            signature: <serialized signature>
-        }
-    */
-    async relayTransaction(txObj) {
-        await this._consensusEstablished;
-        let tx;
-
-        if (typeof txObj.extraData === 'string') {
-            txObj.extraData = Utf8Tools.stringToUtf8ByteArray(txObj.extraData);
-        }
-
-        if (txObj.isVesting) {
-            tx = await this._createVestingTransactionFromObject(txObj);
-        } else if (txObj.extraData && txObj.extraData.length > 0) {
-            tx = await this._createExtendedTransactionFromObject(txObj);
-        } else {
-            tx = await this._createBasicTransactionFromObject(txObj);
-        }
-        // console.log("Debug: transaction size was:", tx.serializedSize);
-        this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
-        return this._consensus.relayTransaction(tx);
-    }
-
-    async getTransactionSize(txObj) {
-        await this._apiInitialized;
-        let tx;
-        if (txObj.extraData && txObj.extraData.length > 0) {
-            tx = await this._createExtendedTransactionFromObject(txObj);
-        } else {
-            tx = await this._createBasicTransactionFromObject(txObj);
-        }
-        return tx.serializedSize;
-    }
 
     async _createBasicTransactionFromObject(obj) {
         await this._apiInitialized;
@@ -433,115 +547,7 @@ export class NanoNetworkApi {
         );
     }
 
-    /**
-     * @param {string|Array<string>} addresses
-     */
-    async subscribe(addresses) {
-        if (!(addresses instanceof Array)) addresses = [addresses];
-        this._subscribeAddresses(addresses);
-        this._recheckBalances(addresses);
-    }
-
-    /**
-     * @param {string|Array<string>} addresses
-     * @returns {Map}
-     */
-    getBalance(addresses) {
-        if (!(addresses instanceof Array)) addresses = [addresses];
-
-        const balances = this._getBalances(addresses);
-        for (const [address, balance] of balances) { this._balances.set(address, balance); }
-
-        return balances;
-    }
-
-    async getAccountTypeString(address) {
-        const account = (await this._getAccounts([address]))[0];
-
-        if (!account) return 'basic';
-
-        // See Nimiq.Account.Type
-        switch (account.type) {
-            case Nimiq.Account.Type.BASIC: return 'basic';
-            case Nimiq.Account.Type.VESTING: return 'vesting';
-            case Nimiq.Account.Type.HTLC: return 'htlc';
-            default: return false;
-        }
-    }
-
-    async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
-        if (!(addresses instanceof Array)) addresses = [addresses];
-
-        let results = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts.get(address), fromHeight)));
-
-        // txs is an array of objects of arrays, which have the format {transaction: Nimiq.Transaction, header: Nimiq.BlockHeader}
-        // We need to reduce this to usable simple tx objects
-
-        // Construct arrays with their relavant information
-        let txs = results.map(r => r.transactions);
-        let removedTxs = results.map(r => r.removedTxHashes);
-        let unresolvedTxs = results.map(r => r.unresolvedReceipts);
-
-        // First, reduce
-        txs = txs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
-        removedTxs = removedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
-        unresolvedTxs = unresolvedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
-
-        // Then map to simple objects
-        txs = txs.map(tx => ({
-            sender: tx.transaction.sender.toUserFriendlyAddress(),
-            recipient: tx.transaction.recipient.toUserFriendlyAddress(),
-            value: Nimiq.Policy.satoshisToCoins(tx.transaction.value),
-            fee: Nimiq.Policy.satoshisToCoins(tx.transaction.fee),
-            extraData: tx.transaction.data,
-            hash: tx.transaction.hash().toBase64(),
-            blockHeight: tx.header.height,
-            blockHash: tx.header.hash().toBase64(),
-            timestamp: tx.header.timestamp,
-            validityStartHeight: tx.validityStartHeight
-        }));
-
-        // Remove duplicate txs
-        const _txHashes = txs.map(tx => tx.hash);
-        txs = txs.filter((tx, index) => {
-            return _txHashes.indexOf(tx.hash) === index;
-        });
-
-        return {
-            newTransactions: txs,
-            removedTransactions: removedTxs,
-            unresolvedTransactions: unresolvedTxs
-        };
-    }
-
-    async getGenesisVestingContracts() {
-        await this._apiInitialized;
-        const accounts = [];
-        const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
-        const count = buf.readUint16();
-        for (let i = 0; i < count; i++) {
-            const address = Nimiq.Address.unserialize(buf);
-            const account = Nimiq.Account.unserialize(buf);
-
-            if (account.type === 1) {
-                accounts.push({
-                    address: address.toUserFriendlyAddress(),
-                    // balance: Nimiq.Policy.satoshisToCoins(account.balance),
-                    owner: account.owner.toUserFriendlyAddress(),
-                    start: account.vestingStart,
-                    stepAmount: Nimiq.Policy.satoshisToCoins(account.vestingStepAmount),
-                    stepBlocks: account.vestingStepBlocks,
-                    totalAmount: Nimiq.Policy.satoshisToCoins(account.vestingTotalAmount)
-                });
-            }
-        }
-        return accounts;
-    }
-
-    async removeTxFromMempool(txObj) {
-        const tx = await this._createBasicTransactionFromObject(txObj);
-        this._consensus.mempool.removeTransaction(tx);
-    }
+   
 
     _onInitialized() {
         // console.log('Nimiq API ready to use');
@@ -620,9 +626,5 @@ export class NanoNetworkApi {
             script.addEventListener('error', () => reject(script), false);
             document.body.appendChild(script);
         });
-    }
-
-    fire() {
-        throw new Error('The fire() method needs to be overloaded!');
     }
 }
