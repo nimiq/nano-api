@@ -11,9 +11,9 @@ yarn add @nimiq/nano-api
 ```
 
 Create an Instance:
-```
+```javascript
 const config = {
-	cdn:'https://cdn.nimiq.com/nimiq.js',
+	cdn: 'https://cdn.nimiq.com/nimiq.js',
 	network: 'test' // or 'main'
 }
 const nimiq = new NanoApi(config)
