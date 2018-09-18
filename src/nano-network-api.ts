@@ -1,11 +1,18 @@
 import {Utf8Tools} from '@nimiq/utils';
 
+type Config = { cdn: string, network: 'main' | 'test' };
+
 export class NanoNetworkApi {
 
-    /**
-     * @param {{cdn:string, network:string}} config
-     */
-    constructor(config) {
+    private _config: Config;
+    private _apiInitialized: Promise<void>;
+    private _selfRelayedTransactionHashes: Set<number>;
+    private _balances: Map<string, number>;
+    private _consensusEstablished!: Promise<void>;
+    private _consensus!: Nimiq.NanoConsensus;
+    private _consensusEstablishedResolver!: any;
+
+    constructor(config: Config) {
         this._config = config;
         this._apiInitialized = new Promise(async (resolve) => {
             await this._importApi();
@@ -26,24 +33,13 @@ export class NanoNetworkApi {
         this._balances = new Map();
     }
 
-    get apiUrl() { return this._config.cdn }
+    private get apiUrl() { return this._config.cdn }
 
-    fire(event, data) {
+    protected fire(event: string, data?: any) {
         throw new Error('The fire() method needs to be overloaded!');
     }
 
-    /**
-     *  @param {Object} txObj: {
-     *         sender: <user friendly address>,
-     *         senderPubKey: <serialized public key>,
-     *         recipient: <user friendly address>,
-     *         value: <value in NIM>,
-     *         fee: <fee in NIM>,
-     *         validityStartHeight: <integer>,
-     *         signature: <serialized signature> 
-     *  }
-     */
-    async relayTransaction(txObj) {
+    public async relayTransaction(txObj: Nimiq.Transaction ??) {
         await this._consensusEstablished;
         let tx;
 
@@ -63,7 +59,7 @@ export class NanoNetworkApi {
         return this._consensus.relayTransaction(tx);
     }
 
-    async getTransactionSize(txObj) {
+    public async getTransactionSize(txObj: Nimiq.Transaction) {
         await this._apiInitialized;
         let tx;
         if (txObj.extraData && txObj.extraData.length > 0) {
@@ -74,7 +70,7 @@ export class NanoNetworkApi {
         return tx.serializedSize;
     }
 
-    async connect() {
+    public async connect() {
         await this._apiInitialized;
 
         Nimiq.GenesisConfig[this._config.network]();
@@ -100,20 +96,13 @@ export class NanoNetworkApi {
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
-     /**
-     * @param {string|Array<string>} addresses
-     */
-    async subscribe(addresses) {
+    async subscribe(addresses: string | string[]) {
         if (!(addresses instanceof Array)) addresses = [addresses];
         this._subscribeAddresses(addresses);
         this._recheckBalances(addresses);
     }
 
-    /**
-     * @param {string|Array<string>} addresses
-     * @returns {Map}
-     */
-    getBalance(addresses) {
+    getBalance(addresses: string | string[]): Map<string, number> {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
         const balances = this._getBalances(addresses);
@@ -122,7 +111,7 @@ export class NanoNetworkApi {
         return balances;
     }
 
-    async getAccountTypeString(address) {
+    async getAccountTypeString(address: string) {
         const account = (await this._getAccounts([address]))[0];
 
         if (!account) return 'basic';
@@ -136,7 +125,7 @@ export class NanoNetworkApi {
         }
     }
 
-    async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
+    async requestTransactionHistory(addresses: string | string[], knownReceipts: Map<string, Nimiq.TransactionReceipt>, fromHeight: number) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
         let results = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts.get(address), fromHeight)));
@@ -191,35 +180,33 @@ export class NanoNetworkApi {
             const account = Nimiq.Account.unserialize(buf);
 
             if (account.type === 1) {
+                const vestingContract = account as Nimiq.VestingContract
                 accounts.push({
                     address: address.toUserFriendlyAddress(),
                     // balance: Nimiq.Policy.satoshisToCoins(account.balance),
-                    owner: account.owner.toUserFriendlyAddress(),
-                    start: account.vestingStart,
-                    stepAmount: Nimiq.Policy.satoshisToCoins(account.vestingStepAmount),
-                    stepBlocks: account.vestingStepBlocks,
-                    totalAmount: Nimiq.Policy.satoshisToCoins(account.vestingTotalAmount)
+                    owner: vestingContract.owner.toUserFriendlyAddress(),
+                    start: vestingContract.vestingStart,
+                    stepAmount: Nimiq.Policy.satoshisToCoins(vestingContract.vestingStepAmount),
+                    stepBlocks: vestingContract.vestingStepBlocks,
+                    totalAmount: Nimiq.Policy.satoshisToCoins(vestingContract.vestingTotalAmount)
                 });
             }
         }
         return accounts;
     }
 
-    async removeTxFromMempool(txObj) {
+    public async removeTxFromMempool(txObj) {
         const tx = await this._createBasicTransactionFromObject(txObj);
         this._consensus.mempool.removeTransaction(tx);
     }
 
-    async _headChanged(header) {
+    private async _headChanged(header) {
         if (!this._consensus.established) return;
         this._recheckBalances();
         this._onHeadChange(header);
     }
 
-    /**
-     * @returns {Array<Account>} An array element can be NULL if account does not exist
-     */
-    async _getAccounts(addresses, stackHeight) {
+    private async _getAccounts(addresses: string[], stackHeight = 0): Promise<Nimiq.Account[]> {
         if (addresses.length === 0) return [];
         await this._consensusEstablished;
         let accounts;
@@ -227,9 +214,8 @@ export class NanoNetworkApi {
         try {
             accounts = await this._consensus.getAccounts(addressesAsAddresses);
         } catch (e) {
-            stackHeight = stackHeight || 0;
             stackHeight++;
-            return await new Promise(resolve => {
+            return await new Promise<Nimiq.Account[]>(resolve => {
                 const timeout = 1000 * stackHeight;
                 setTimeout(async _ => {
                     resolve(await this._getAccounts(addresses, stackHeight));
@@ -241,20 +227,13 @@ export class NanoNetworkApi {
         return accounts;
     }
 
-    /**
-     * @param {Array<string>} addresses
-     */
-    async _subscribeAddresses(addresses) {
+    private async _subscribeAddresses(addresses: string[]) {
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
         await this._consensusEstablished;
         this._consensus.subscribeAccounts(addressesAsAddresses);
     }
 
-    /**
-     * @param {Array<string>} addresses
-     * @returns {Map}
-     */
-    async _getBalances(addresses) {
+    private async _getBalances(addresses: string[]): Map<string, number> {
         let accounts = await this._getAccounts(addresses);
 
         const balances = new Map();
@@ -273,9 +252,9 @@ export class NanoNetworkApi {
      * @param {Map} [knownReceipts] A map with the tx hash as key and the blockhash as value
      * @param {uint} [fromHeight]
      */
-    async _requestTransactionHistory(address, knownReceipts = new Map(), fromHeight = 0) {
+    private async _requestTransactionHistory(addressString: string, knownReceipts = new Map<string, string>(), fromHeight = 0) {
         await this._consensusEstablished;
-        address = Nimiq.Address.fromUserFriendlyAddress(address);
+        const address = Nimiq.Address.fromUserFriendlyAddress(addressString);
 
         // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
 
@@ -305,12 +284,12 @@ export class NanoNetworkApi {
         // The JungleDB does currently not support TransactionReceiptsMessage's offset parameter.
         // Thus, when the limit is returned, we can make no assumption about removed transactions.
         // TODO: FIXME when offset is enabled
-        let removedTxHashes = [];
+        let removedTxHashes: string[] = [];
         if (receipts.length === Nimiq.TransactionReceiptsMessage.RECEIPTS_MAX_COUNT) {
             console.warn('Maximum number of receipts returned, cannot determine removed transactions. Transaction history is likely incomplete.');
         } else {
             const receiptTxHashes = receipts.map(r => r.transactionHash.toBase64());
-            removedTxHashes = knownTxHashes.filter(knownTxHash => !receiptTxHashes.includes(knownTxHash));
+            removedTxHashes = knownTxHashes.filter(knownTxHash => receiptTxHashes.indexOf(knownTxHash) === -1);
         }
 
         // 2b. Filter out known receipts.
@@ -320,7 +299,7 @@ export class NanoNetworkApi {
             const hash = receipt.transactionHash.toBase64();
 
             // Known transaction
-            if (knownTxHashes.includes(hash)) {
+            if (knownTxHashes.indexOf(hash) > -1) {
                 // Check if block has changed
                 return receipt.blockHash.toBase64() !== knownReceipts.get(hash);
             }
@@ -333,16 +312,16 @@ export class NanoNetworkApi {
 
         // console.log(`Reduced to ${receipts.length} unknown receipts.`);
 
-        const unresolvedReceipts = [];
+        const unresolvedReceipts: Nimiq.TransactionReceipt[] = [];
 
         // 3. Request proofs for missing blocks.
         /** @type {Array.<Promise.<Block>>} */
         const blockRequests = [];
         let lastBlockHash = null;
         for (const receipt of receipts) {
-            if (!receipt.blockHash.equals(lastBlockHash)) {
+            if (!lastBlockHash || !receipt.blockHash.equals(lastBlockHash)) {
                 // eslint-disable-next-line no-await-in-loop
-                const block = await this._consensus._blockchain.getBlock(receipt.blockHash);
+                const block = await this._consensus.blockchain.getBlock(receipt.blockHash);
                 if (block) {
                     blockRequests.push(Promise.resolve(block));
                 } else {
@@ -390,18 +369,18 @@ export class NanoNetworkApi {
         };
     }
 
-    __consensusEstablished() {
+    private __consensusEstablished() {
         this._consensusEstablishedResolver();
         this._headChanged(this._consensus.blockchain.head);
         this._onConsensusEstablished();
     }
 
-    _consensusLost() {
+    private _consensusLost() {
         this._createConsensusPromise();
         this._onConsensusLost();
     }
 
-    _transactionAdded(tx) {
+    private _transactionAdded(tx) {
         // Self-relayed transactions are added by the 'transaction-requested' event
         const hash = tx.hash().toBase64();
         if (this._selfRelayedTransactionHashes.has(hash)) return;
@@ -415,7 +394,7 @@ export class NanoNetworkApi {
         this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, hash, tx.validityStartHeight);
     }
 
-    _transactionExpired(tx) {
+    private _transactionExpired(tx) {
         const senderAddr = tx.sender.toUserFriendlyAddress();
 
         // Handle tx amount when the sender is own account
@@ -424,7 +403,7 @@ export class NanoNetworkApi {
         this._onTransactionExpired(tx.hash().toBase64());
     }
 
-    _transactionMined(tx, header) {
+    private _transactionMined(tx: Nimiq.Transaction, header: Nimiq.BlockHeader) {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
@@ -434,7 +413,7 @@ export class NanoNetworkApi {
         this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
     }
 
-    _transactionRelayed(tx) {
+    private _transactionRelayed(tx) {
         const senderAddr = tx.sender.toUserFriendlyAddress();
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
@@ -444,18 +423,17 @@ export class NanoNetworkApi {
         this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, tx.hash().toBase64(), tx.validityStartHeight);
     }
 
-    _createConsensusPromise() {
+    private _createConsensusPromise() {
         this._consensusEstablished = new Promise(resolve => {
             this._consensusEstablishedResolver = resolve;
         });
     }
 
-    _globalHashrate(difficulty) {
+    private _globalHashrate(difficulty: number) {
         return Math.round(difficulty * Math.pow(2, 16) / Nimiq.Policy.BLOCK_TIME);
     }
 
-    async _recheckBalances(addresses) {
-        if (!addresses) addresses = [...this._balances.keys()];
+    private async _recheckBalances(addresses: string | string[] = [...this._balances.keys()]) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
         const balances = await this._getBalances(addresses);
@@ -475,7 +453,7 @@ export class NanoNetworkApi {
         if (balances.size) this._onBalancesChanged(balances);
     }
 
-    _getPendingAmount(address) {
+    _getPendingAmount(address: string) {
         const txs = this._consensus.mempool.getPendingTransactions(Nimiq.Address.fromUserFriendlyAddress(address));
         const pendingAmount = txs.reduce((acc, tx) => acc + Nimiq.Policy.satoshisToCoins(tx.value + tx.fee), 0);
         return pendingAmount;
@@ -604,7 +582,7 @@ export class NanoNetworkApi {
         this.fire('nimiq-api-fail', e);
     }
 
-    _onHeadChange(header) {
+    _onHeadChange(header: Nimiq.BlockHeader) {
         // console.log('height changed:', height);
         this.fire('nimiq-head-change', {
             height: header.height,
