@@ -39,7 +39,7 @@ export class NanoNetworkApi {
         throw new Error('The fire() method needs to be overloaded!');
     }
 
-    public async relayTransaction(txObj: Nimiq.Transaction ??) {
+    public async relayTransaction(txObj: Nimiq.Transaction) {
         await this._consensusEstablished;
         let tx;
 
@@ -96,13 +96,13 @@ export class NanoNetworkApi {
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
-    async subscribe(addresses: string | string[]) {
+    public async subscribe(addresses: string | string[]) {
         if (!(addresses instanceof Array)) addresses = [addresses];
         this._subscribeAddresses(addresses);
         this._recheckBalances(addresses);
     }
 
-    getBalance(addresses: string | string[]): Map<string, number> {
+    public getBalance(addresses: string | string[]): Map<string, number> {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
         const balances = this._getBalances(addresses);
@@ -111,7 +111,7 @@ export class NanoNetworkApi {
         return balances;
     }
 
-    async getAccountTypeString(address: string) {
+    public async getAccountTypeString(address: string) {
         const account = (await this._getAccounts([address]))[0];
 
         if (!account) return 'basic';
@@ -125,7 +125,7 @@ export class NanoNetworkApi {
         }
     }
 
-    async requestTransactionHistory(addresses: string | string[], knownReceipts: Map<string, Nimiq.TransactionReceipt>, fromHeight: number) {
+    public async requestTransactionHistory(addresses: string | string[], knownReceipts: Map<string, Nimiq.TransactionReceipt>, fromHeight: number) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
         let results = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts.get(address), fromHeight)));
@@ -170,7 +170,7 @@ export class NanoNetworkApi {
         };
     }
 
-    async getGenesisVestingContracts() {
+    public async getGenesisVestingContracts() {
         await this._apiInitialized;
         const accounts = [];
         const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
