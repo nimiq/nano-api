@@ -40,7 +40,8 @@ export class NanoNetworkApi {
      *         value: <value in NIM>,
      *         fee: <fee in NIM>,
      *         validityStartHeight: <integer>,
-     *         signature: <serialized signature> 
+     *         signature: <serialized signature> ,
+     *         extraData: <data as string or byte array>
      *  }
      */
     async relayTransaction(txObj) {
@@ -270,7 +271,7 @@ export class NanoNetworkApi {
 
     /**
      * @param {string} address
-     * @param {Map} [knownReceipts] A map with the tx hash as key and the blockhash as value
+     * @param {Map} [knownReceipts] A map with the tx hash as key and the blockhash as value (both base64)
      * @param {uint} [fromHeight]
      */
     async _requestTransactionHistory(address, knownReceipts = new Map(), fromHeight = 0) {
@@ -547,7 +548,7 @@ export class NanoNetworkApi {
         );
     }
 
-   
+
 
     _onInitialized() {
         // console.log('Nimiq API ready to use');
