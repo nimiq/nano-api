@@ -218,7 +218,7 @@ export class NanoNetworkApi {
     }
 
     /**
-     * @returns {Array<Account>} An array element can be NULL if account does not exist
+     * @returns {Promise<Account[]>} An array element can be NULL if account does not exist
      */
     async _getAccounts(addresses, stackHeight) {
         if (addresses.length === 0) return [];
@@ -243,7 +243,7 @@ export class NanoNetworkApi {
     }
 
     /**
-     * @param {Array<string>} addresses
+     * @param {string[]} addresses
      */
     async _subscribeAddresses(addresses) {
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
@@ -252,8 +252,8 @@ export class NanoNetworkApi {
     }
 
     /**
-     * @param {Array<string>} addresses
-     * @returns {Map}
+     * @param {string[]} addresses
+     * @returns {Promise<Map<string, number>>}
      */
     async _getBalances(addresses) {
         let accounts = await this._getAccounts(addresses);
@@ -403,7 +403,7 @@ export class NanoNetworkApi {
     }
 
     _transactionAdded(tx) {
-        // Self-relayed transactions are added by the 'transaction-requested' event
+        // Self-relayed transactions are added by the 'transaction-relayed' event
         const hash = tx.hash().toBase64();
         if (this._selfRelayedTransactionHashes.has(hash)) return;
 
