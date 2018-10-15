@@ -112,12 +112,12 @@ export class NanoNetworkApi {
 
     /**
      * @param {string|Array<string>} addresses
-     * @returns {Map}
+     * @returns {Promise<Map<string, number>>}
      */
-    getBalance(addresses) {
+    async getBalance(addresses) {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
-        const balances = this._getBalances(addresses);
+        const balances = await this._getBalances(addresses);
         for (const [address, balance] of balances) { this._balances.set(address, balance); }
 
         return balances;
