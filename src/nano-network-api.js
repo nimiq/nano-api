@@ -43,6 +43,7 @@ export class NanoNetworkApi {
      *         signature: <serialized signature> ,
      *         extraData: <data as string or byte array>
      *  }
+     * @returns {Promise<void>}
      */
     async relayTransaction(txObj) {
         await this._consensusEstablished;
@@ -64,6 +65,10 @@ export class NanoNetworkApi {
         return this._consensus.relayTransaction(tx);
     }
 
+    /**
+     * @param {Object} txObj
+     * @returns {Promise<number>}
+     */
     async getTransactionSize(txObj) {
         await this._apiInitialized;
         let tx;
@@ -123,6 +128,10 @@ export class NanoNetworkApi {
         return balances;
     }
 
+    /**
+     * @param {string} address
+     * @returns {string | boolean}
+     */
     async getAccountTypeString(address) {
         const account = (await this._getAccounts([address]))[0];
 
@@ -482,8 +491,6 @@ export class NanoNetworkApi {
         return pendingAmount;
     }
 
-
-
     async _createBasicTransactionFromObject(obj) {
         await this._apiInitialized;
         const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
@@ -547,8 +554,6 @@ export class NanoNetworkApi {
             serializedProof
         );
     }
-
-
 
     _onInitialized() {
         // console.log('Nimiq API ready to use');
