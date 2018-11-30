@@ -193,15 +193,15 @@ export class NanoNetworkApi {
 
     async getGenesisVestingContracts() {
         await this._apiInitialized;
-        const accounts = [];
+        const contracts = [];
         const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
         const count = buf.readUint16();
         for (let i = 0; i < count; i++) {
             const address = Nimiq.Address.unserialize(buf);
             const account = Nimiq.Account.unserialize(buf);
 
-            if (account.type === 1) {
-                accounts.push({
+            if (account.type === Nimiq.Account.Type.VESTING) {
+                contracts.push({
                     address: address.toUserFriendlyAddress(),
                     // balance: Nimiq.Policy.satoshisToCoins(account.balance),
                     owner: account.owner.toUserFriendlyAddress(),
@@ -212,7 +212,7 @@ export class NanoNetworkApi {
                 });
             }
         }
-        return accounts;
+        return contracts;
     }
 
     async removeTxFromMempool(txObj) {
