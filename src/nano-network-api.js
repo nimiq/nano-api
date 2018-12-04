@@ -600,11 +600,6 @@ export class NanoNetworkApi {
         this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
     }
 
-    _onDifferentTabError(e) {
-        // console.log('Nimiq API is already running in a different tab:', e);
-        this.fire('nimiq-different-tab-error', e);
-    }
-
     _onInitializationError(e) {
         console.error('Nimiq API could not be initialized:', e);
         this.fire('nimiq-api-fail', e);
