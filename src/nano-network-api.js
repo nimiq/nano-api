@@ -62,7 +62,8 @@ export class NanoNetworkApi {
         }
         // console.log("Debug: transaction size was:", tx.serializedSize);
         this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
-        return this._consensus.relayTransaction(tx);
+        this._consensus.relayTransaction(tx);
+        return true;
     }
 
     /**
@@ -104,6 +105,8 @@ export class NanoNetworkApi {
         this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
+
+        return true;
     }
 
      /**
@@ -113,6 +116,7 @@ export class NanoNetworkApi {
         if (!(addresses instanceof Array)) addresses = [addresses];
         this._subscribeAddresses(addresses);
         this._recheckBalances(addresses);
+        return true;
     }
 
     /**
@@ -218,6 +222,7 @@ export class NanoNetworkApi {
     async removeTxFromMempool(txObj) {
         const tx = await this._createBasicTransactionFromObject(txObj);
         this._consensus.mempool.removeTransaction(tx);
+        return true;
     }
 
     async _headChanged(header) {
