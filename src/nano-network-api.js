@@ -84,9 +84,11 @@ export class NanoNetworkApi {
     async connect() {
         await this._apiInitialized;
 
-        Nimiq.GenesisConfig[this._config.network]();
+        try {
+            Nimiq.GenesisConfig[this._config.network]();
+        } catch (e) {}
 
-        this._consensus = await Nimiq.Consensus.volatileNano();
+        this._consensus = await Nimiq.Consensus.nano();
         this._consensus.on('syncing', e => this._onConsensusSyncing());
         this._consensus.on('established', e => this.__consensusEstablished());
         this._consensus.on('lost', e => this._consensusLost());
@@ -106,6 +108,11 @@ export class NanoNetworkApi {
         this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
         this._consensus.network.on('peers-changed', () => this._onPeersChanged());
 
+        return true;
+    }
+
+    async disconnect() {
+        this._consensus.network.disconnect();
         return true;
     }
 
@@ -611,7 +618,7 @@ export class NanoNetworkApi {
     }
 
     _onHeadChange(header) {
-        // console.log('height changed:', height);
+        // console.log('height changed:', header.height);
         this.fire('nimiq-head-change', {
             height: header.height,
             globalHashrate: this._globalHashrate(header.difficulty)
