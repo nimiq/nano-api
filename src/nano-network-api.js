@@ -27,6 +27,9 @@ export class NanoNetworkApi {
 
         /** @type {Nimiq.PeerChannel[]} */
         this._picoChannels = [];
+
+        /** @type {boolean} */
+        this._shouldConnect = true;
     }
 
     get apiUrl() { return this._config.cdn }
@@ -85,7 +88,9 @@ export class NanoNetworkApi {
     }
 
     async connect() {
+        this._shouldConnect = true;
         await this._apiInitialized;
+        if (!this._shouldConnect) return;
 
         try {
             Nimiq.GenesisConfig[this._config.network]();
@@ -115,7 +120,10 @@ export class NanoNetworkApi {
     }
 
     async disconnect() {
-        this._consensus.network.disconnect();
+        this._shouldConnect = false;
+        await this._apiInitialized;
+        if (this._shouldConnect) return;
+        this._consensus && this._consensus.network && this._consensus.network.disconnect();
         return true;
     }
 
