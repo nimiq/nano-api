@@ -1,6 +1,6 @@
 {
   "name": "@nimiq/nano-api",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Nano Network API",
   "main": "dist/nano-network-api.umd.js",
   "module": "dist/nano-network-api.es.js",
