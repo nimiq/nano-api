@@ -24,6 +24,9 @@ export class NanoNetworkApi {
         this._selfRelayedTransactionHashes = new Set();
 
         this._balances = new Map();
+
+        /** @type {Nimiq.PeerChannel[]} */
+        this._picoChannels = [];
     }
 
     get apiUrl() { return this._config.cdn }
@@ -114,6 +117,130 @@ export class NanoNetworkApi {
     async disconnect() {
         this._consensus.network.disconnect();
         return true;
+    }
+
+    /**
+     * @param {string[]}
+     * @returns {Promise<Map<string, number>>}
+     */
+    async connectPico(userFriendlyAddresses = []) {
+        return new Promise(async (resolve) => {
+            await this._apiInitialized;
+
+            /** @type {Nimiq.Address[]} */
+            const addresses = userFriendlyAddresses.map((address) => Nimiq.Address.fromUserFriendlyAddress(address));
+
+            try {
+                Nimiq.GenesisConfig[this._config.network]();
+            } catch (e) {}
+
+            const consensus = await Nimiq.Consensus.nano();
+            const networkConfig = consensus.network.config;
+
+            const picoHeads = [];
+            let currentHead = null;
+            /** @type {Map<string, number>} */
+            const picoBalances = new Map();
+
+            const fallbackToNanoConsensus = async () => {
+                this.connect()
+                const balances = await this.getBalance(userFriendlyAddresses);
+                resolve(balances);
+            }
+
+            const onChannelHead = (channel, header) => {
+                this._picoChannels.push(channel);
+                picoHeads.push(header);
+
+                if (this._picoChannels.length >= 3) {
+                    let highest = {height: 0}; let lowest = {height: Number.MAX_SAFE_INTEGER};
+                    for (const head of picoHeads) {
+                        if (head.height > highest.height) highest = head;
+                        if (head.height < lowest.height) lowest = head;
+                    }
+                    if (highest.height - lowest.height <= 1) {
+                        if (!currentHead) {
+                            this._onHeadChange(lowest);
+                            currentHead = lowest;
+                            getBalances();
+                        }
+                    }
+                    else {
+                        console.warn('[Pico] Peers disagree about head height:', lowest.height, highest.height);
+                        fallbackToNanoConsensus();
+                    }
+                }
+            };
+
+            const getBalances = () => {
+                if (addresses.length === 0) return;
+                console.debug('[Pico] Getting balances');
+
+                for(const channel of this._picoChannels) {
+                    channel.getAccountsProof(currentHead.hash(), addresses);
+                }
+            };
+
+            let hasBalanceConsensus = true;
+            let receivedBalanceMsgCount = 0;
+            const onBalancesMsg = (msg) => {
+                console.debug('[Pico] Received accounts-proof message', msg);
+                if (hasBalanceConsensus && msg.hasProof && msg.blockHash.equals(currentHead.hash())) {
+                    console.debug('[Pico] Verifying message');
+                    msg.proof.verify(); // Index accounts
+                    if (msg.proof.root().equals(currentHead.accountsHash)) {
+                        console.debug('[Pico] Getting accounts from message');
+                        for (let i = 0; i < addresses.length; i++) {
+                            const address = addresses[i];
+                            const userFriendlyAddress = address.toUserFriendlyAddress();
+                            console.debug('[Pico] Getting account', userFriendlyAddress);
+                            const account = msg.proof.getAccount(address);
+                            const balance = account ? Nimiq.Policy.satoshisToCoins(account.balance) : 0;
+                            console.debug('[Pico] Balance of account', balance);
+
+                            const storedBalance = picoBalances.get(userFriendlyAddress);
+                            if (!storedBalance) picoBalances.set(userFriendlyAddress, balance);
+                            else if (storedBalance !== balance) {
+                                hasBalanceConsensus = false;
+                                console.warn('[Pico] Peers disagree about balances');
+                                fallbackToNanoConsensus();
+                                return;
+                            }
+                        }
+                        receivedBalanceMsgCount += 1;
+                        console.debug('[Pico] Received balance msg count:', receivedBalanceMsgCount);
+                        if (receivedBalanceMsgCount >= 3) resolve(picoBalances);
+                    }
+                }
+            };
+
+            // TODO: Store randomly chosen seeds here to not connect twice to the same
+            const connectedSeeds = [];
+
+            for (let i = 0; i < 4; i++) {
+                const connector = new Nimiq.WebSocketConnector(Nimiq.Protocol.WSS, 'wss', networkConfig);
+
+                connector.on('connection', (conn) => {
+                    const channel = new Nimiq.PeerChannel(conn);
+                    const agent = new Nimiq.NetworkAgent(consensus.blockchain, consensus.network.addresses, networkConfig, channel);
+                    let header = null;
+                    channel.on('head', (msg) => {
+                        header = msg.header;
+                        console.debug(`[Pico] Current height is ${header.height}`);
+                        onChannelHead(channel, header);
+                    });
+                    channel.on('accounts-proof', (msg) => {
+                        onBalancesMsg(msg);
+                    })
+                    agent.on('handshake', () => {
+                        channel.getHead();
+                    });
+                });
+
+                // Testnet only has 4 seeds
+                connector.connect(Nimiq.GenesisConfig.SEED_PEERS[i]);
+            }
+        });
     }
 
      /**
