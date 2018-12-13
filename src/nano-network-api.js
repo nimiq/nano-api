@@ -149,11 +149,13 @@ export class NanoNetworkApi {
             let currentHead = null;
             /** @type {Map<string, number>} */
             const picoBalances = new Map();
+            let resolved = false;
 
             const fallbackToNanoConsensus = async () => {
                 this.connect()
                 const balances = await this.getBalance(userFriendlyAddresses);
                 resolve(balances);
+                resolved = true;
             }
 
             const onChannelHead = (channel, header) => {
@@ -217,7 +219,10 @@ export class NanoNetworkApi {
                         }
                         receivedBalanceMsgCount += 1;
                         console.debug('[Pico] Received balance msg count:', receivedBalanceMsgCount);
-                        if (receivedBalanceMsgCount >= 3) resolve(picoBalances);
+                        if (receivedBalanceMsgCount >= 3) {
+                            resolve(picoBalances);
+                            resolved = true;
+                        }
                     }
                 }
             };
@@ -248,6 +253,11 @@ export class NanoNetworkApi {
                 // Testnet only has 4 seeds
                 connector.connect(Nimiq.GenesisConfig.SEED_PEERS[i]);
             }
+
+            setTimeout(() => {
+                if (resolved) return;
+                fallbackToNanoConsensus();
+            }, 5000);
         });
     }
 
