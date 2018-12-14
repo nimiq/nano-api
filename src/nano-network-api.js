@@ -96,7 +96,8 @@ export class NanoNetworkApi {
             Nimiq.GenesisConfig[this._config.network]();
         } catch (e) {}
 
-        this._consensus = await Nimiq.Consensus.nano();
+        // Uses volatileNano to enable more than one parallel network iframe
+        this._consensus = await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this._onConsensusSyncing());
         this._consensus.on('established', e => this.__consensusEstablished());
         this._consensus.on('lost', e => this._consensusLost());
@@ -142,7 +143,8 @@ export class NanoNetworkApi {
                 Nimiq.GenesisConfig[this._config.network]();
             } catch (e) {}
 
-            const consensus = await Nimiq.Consensus.nano();
+            // Uses volatileNano to enable more than one parallel network iframe
+            const consensus = await Nimiq.Consensus.volatileNano();
             const networkConfig = consensus.network.config;
 
             const picoHeads = [];
