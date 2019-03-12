@@ -26,7 +26,7 @@ export default [
     {
         input: 'build/nano-api.js',
         output: {
-            file: 'dist/nano-network-api.es.js',
+            file: 'dist/nano-api.es.js',
             format: 'es'
         },
         external: dependencies

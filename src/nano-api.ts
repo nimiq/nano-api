@@ -1,5 +1,6 @@
 import { Utf8Tools } from '@nimiq/utils';
-import { BigNumber } from '@nimiq/core';
+
+// TODO implement requestTransactionReceipts
 
 type Config = { cdn: string, network: 'main' | 'test' };
 
