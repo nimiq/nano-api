@@ -3,17 +3,17 @@ const dependencies = Object.keys(require('./package.json').dependencies);
 
 export default [
     {
-        input: 'build/nano-network-api.js',
+        input: 'build/nano-api.js',
         output: {
-            file: 'dist/nano-network-api.common.js',
+            file: 'dist/nano-api.common.js',
             format: 'cjs'
         },
         external: dependencies
     },
     {
-        input: 'build/nano-network-api.ts',
+        input: 'build/nano-api.js',
         output: {
-            file: 'dist/nano-network-api.umd.js',
+            file: 'dist/nano-api.umd.js',
             format: 'umd',
             name: 'window',
             extend: true,
@@ -24,7 +24,7 @@ export default [
         external: dependencies
     },
     {
-        input: 'build/nano-network-api.ts',
+        input: 'build/nano-api.js',
         output: {
             file: 'dist/nano-network-api.es.js',
             format: 'es'

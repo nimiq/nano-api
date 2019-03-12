@@ -2,13 +2,15 @@
 # yarn lockfile v1
 
 
-"@nimiq/core-types@^1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@nimiq/core-types/-/core-types-1.0.0.tgz#a675cf2c151d9146e79934035e999bbd08a59d42"
+"@nimiq/core-types@^1.4.2":
+  version "1.4.2"
+  resolved "https://registry.yarnpkg.com/@nimiq/core-types/-/core-types-1.4.2.tgz#16e7bbc9a1b5a9dd5f7d0d735ef07f096799946c"
+  integrity sha512-M7Qm/dOby0BIWr0/reQEcTP8VrbTdHGZVklPQnpcAJtpY0geDW2XD2jqCcapSOPJCv/fpovDJtTvBMITiGrFFw==
 
-"@nimiq/utils@^0.0.2":
-  version "0.0.2"
-  resolved "https://registry.yarnpkg.com/@nimiq/utils/-/utils-0.0.2.tgz#190747f8ef9e6b4640e4ee3c5a9c0b089bf47049"
+"@nimiq/utils@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@nimiq/utils/-/utils-0.2.0.tgz#a9bc73358f95a355518bc371870282d65f494ebe"
+  integrity sha512-vuLZ09OYY3AKX0wJfnBMfx8ybogrNjWXLIoOe8HUURMa6oOFxbnLO0bc9yLIwFWWoWqB6t6RcInDMJOQcpkJyA==
 
 "@types/estree@0.0.39":
   version "0.0.39"
@@ -24,3 +26,8 @@ rollup@^0.65.0:
   dependencies:
     "@types/estree" "0.0.39"
     "@types/node" "*"
+
+typescript@^3.3.3333:
+  version "3.3.3333"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.3.3333.tgz#171b2c5af66c59e9431199117a3bcadc66fdcfd6"
+  integrity sha512-JjSKsAfuHBE/fB2oZ8NxtRTk5iGcg6hkYXMnZ3Wc+b2RSqejEqTaem11mHASMnFilHrax3sLK0GDzcJrekZYLw==
