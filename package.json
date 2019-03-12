@@ -1,9 +1,9 @@
 {
   "name": "@nimiq/nano-api",
-  "version": "0.1.0-alpha1",
+  "version": "0.1.0-alpha7",
   "description": "Nano Network API",
-  "main": "dist/nano-api.umd.js",
-  "module": "dist/nano-api.es.js",
+  "main": "dist/NanoApi.umd.js",
+  "module": "dist/NanoApi.es.js",
   "types": "types/index.d.ts",
   "repository": "git@github.com:nimiq/nano-api.git",
   "author": "Nimiq",

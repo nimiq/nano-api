@@ -2,19 +2,7 @@ import { Utf8Tools } from '@nimiq/utils';
 
 // TODO implement requestTransactionReceipts
 
-type Config = { cdn: string, network: 'main' | 'test' };
-
-type TransactionObject = {
-    sender: string, // human readable address
-    senderPubKey: Uint8Array, // serialized public key
-    recipient: string, // human readable address
-    value: number, // in NIM
-    fee: number, // in NIM
-    validityStartHeight: number,
-    signature: Uint8Array, // serialized signature
-    extraData: string | Uint8Array,
-    isVesting: boolean,
-};
+type Config = { cdn: string, network: 'main' | 'test' | 'dev', usePico?: boolean };
 
 export type PlainTransaction = {
     sender: string,
@@ -25,6 +13,7 @@ export type PlainTransaction = {
     validityStartHeight: number,
     signature: Uint8Array,
     extraData?: string | Uint8Array,
+    isVesting?: boolean,
 };
 
 export type DetailedPlainTransaction = {
@@ -38,6 +27,7 @@ export type DetailedPlainTransaction = {
     blockHash?: string, // base64
     timestamp: number,
     validityStartHeight: number,
+    isVesting?: boolean,
 };
 
 export type PlainVestingContract = {
@@ -49,7 +39,38 @@ export type PlainVestingContract = {
     totalAmount: number,
 };
 
-export class NanoNetworkApi {
+export enum Events {
+    API_READY = 'nimiq-api-ready',
+    API_FAIL = 'nimiq-api-fail',
+    CONSENSUS_SYNCING = 'nimiq-consensus-syncing',
+    CONSENSUS_ESTABLISHED = 'nimiq-consensus-established',
+    CONSENSUS_LOST = 'nimiq-consensus-lost',
+    PEERS_CHANGED = 'nimiq-peer-count',
+    BALANCES_CHANGED = 'nimiq-balances',
+    TRANSACTION_PENDING = 'nimiq-transaction-pending',
+    TRANSACTION_EXPIRED = 'nimiq-transaction-expired',
+    TRANSACTION_MINED = 'nimiq-transaction-mined',
+    TRANSACTION_RELAYED = 'nimiq-transaction-relayed',
+    HEAD_CHANGE = 'nimiq-head-change',
+}
+
+export class NanoApi {
+    public static createInstance(config: Config) {
+        if (NanoApi._instance) throw new Error('NanoApi already instantiated.');
+        const client = new NanoApi(config);
+        NanoApi._instance = client;
+        return client;
+    }
+
+    public static hasInstance() {
+        return !!NanoApi._instance;
+    }
+
+    public static get Instance(): NanoApi | null {
+        return NanoApi._instance;
+    }
+
+    private static _instance: NanoApi | null = null;
 
     private _config: Config;
     private _apiInitialized: Promise<void>;
@@ -69,7 +90,6 @@ export class NanoNetworkApi {
                 this.onInitializationError(e.message || e);
                 return; // Do not resolve promise
             }
-            // setTimeout(resolve, 500);
             this.onInitialized();
             resolve();
         });
@@ -86,7 +106,7 @@ export class NanoNetworkApi {
         throw new Error('The fire() method needs to be overloaded!');
     }
 
-    public async relayTransaction(txObj: TransactionObject) {
+    public async relayTransaction(txObj: PlainTransaction) {
         await this._consensusEstablished;
         let tx;
 
@@ -107,7 +127,7 @@ export class NanoNetworkApi {
         return true;
     }
 
-    public async getTransactionSize(txObj: TransactionObject): Promise<number> {
+    public async getTransactionSize(txObj: PlainTransaction): Promise<number> {
         await this._apiInitialized;
         let tx;
         if (txObj.extraData && txObj.extraData.length > 0) {
@@ -199,7 +219,7 @@ export class NanoNetworkApi {
         return contracts;
     }
 
-    public async removeTxFromMempool(txObj: TransactionObject) {
+    public async removeTxFromMempool(txObj: PlainTransaction) {
         const tx = await this.createBasicTransactionFromObject(txObj);
         this._consensus.mempool.removeTransaction(tx);
         return true;
