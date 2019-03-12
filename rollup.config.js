@@ -3,17 +3,17 @@ const dependencies = Object.keys(require('./package.json').dependencies);
 
 export default [
     {
-        input: 'build/nano-api.js',
+        input: 'build/NanoApi.js',
         output: {
-            file: 'dist/nano-api.common.js',
+            file: 'dist/NanoApi.common.js',
             format: 'cjs'
         },
         external: dependencies
     },
     {
-        input: 'build/nano-api.js',
+        input: 'build/NanoApi.js',
         output: {
-            file: 'dist/nano-api.umd.js',
+            file: 'dist/NanoApi.umd.js',
             format: 'umd',
             name: 'window',
             extend: true,
@@ -24,9 +24,9 @@ export default [
         external: dependencies
     },
     {
-        input: 'build/nano-api.js',
+        input: 'build/NanoApi.js',
         output: {
-            file: 'dist/nano-api.es.js',
+            file: 'dist/NanoApi.es.js',
             format: 'es'
         },
         external: dependencies

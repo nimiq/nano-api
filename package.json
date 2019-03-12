@@ -2,8 +2,9 @@
   "name": "@nimiq/nano-api",
   "version": "0.1.0-alpha1",
   "description": "Nano Network API",
-  "main": "dist/nano-network-api.umd.js",
-  "module": "dist/nano-network-api.es.js",
+  "main": "dist/nano-api.umd.js",
+  "module": "dist/nano-api.es.js",
+  "types": "types/index.d.ts",
   "repository": "git@github.com:nimiq/nano-api.git",
   "author": "Nimiq",
   "license": "Apache-2.0",
@@ -11,7 +12,8 @@
     "build": "rm -rf build && rm -rf dist && tsc && rollup -c"
   },
   "files": [
-    "dist"
+    "dist",
+    "types/index.d.ts"
   ],
   "dependencies": {
     "@nimiq/utils": "^0.2.0"
