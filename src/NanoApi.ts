@@ -1,8 +1,7 @@
 import { Utf8Tools } from '@nimiq/utils';
+import { TransactionReceipt } from '@nimiq/core-web';
 
-// TODO implement requestTransactionReceipts
-
-type Config = { cdn: string, network: 'main' | 'test' | 'dev', usePico?: boolean };
+type Config = { cdn: string, network: 'main' | 'test' | 'dev' };
 
 export type PlainTransaction = {
     sender: string,
@@ -54,24 +53,13 @@ export enum Events {
     HEAD_CHANGE = 'nimiq-head-change',
 }
 
+export enum AccountType {
+    BASIC = 'basic',
+    HTLC = 'htlc',
+    VESTING = 'vesting',
+}
+
 export class NanoApi {
-    public static createInstance(config: Config) {
-        if (NanoApi._instance) throw new Error('NanoApi already instantiated.');
-        const client = new NanoApi(config);
-        NanoApi._instance = client;
-        return client;
-    }
-
-    public static hasInstance() {
-        return !!NanoApi._instance;
-    }
-
-    public static get Instance(): NanoApi | null {
-        return NanoApi._instance;
-    }
-
-    private static _instance: NanoApi | null = null;
-
     private _config: Config;
     private _apiInitialized: Promise<void>;
     private _selfRelayedTransactionHashes: Set<string>;
@@ -100,10 +88,30 @@ export class NanoApi {
         this._balances = new Map();
     }
 
-    private get apiUrl() { return this._config.cdn }
+    public async connect() {
+        await this._apiInitialized;
 
-    protected fire(event: string, data?: any) {
-        throw new Error('The fire() method needs to be overloaded!');
+        try {
+            Nimiq.GenesisConfig[this._config.network]();
+        } catch (e) {}
+
+        // Uses volatileNano to enable more than one parallel network iframe
+        this._consensus = await Nimiq.Consensus.volatileNano();
+        this._consensus.on('syncing', e => this.onConsensusSyncing());
+        this._consensus.on('established', e => this.__consensusEstablished());
+        this._consensus.on('lost', e => this.consensusLost());
+
+        this._consensus.on('transaction-relayed', tx => this.transactionRelayed(tx));
+
+        this._consensus.network.connect();
+
+        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
+        this._consensus.mempool.on('transaction-added', tx => this.transactionAdded(tx));
+        this._consensus.mempool.on('transaction-expired', tx => this.transactionExpired(tx));
+        this._consensus.mempool.on('transaction-mined', (tx, header) => this.transactionMined(tx, header));
+        this._consensus.network.on('peers-changed', () => this.onPeersChanged());
+
+        return true;
     }
 
     public async relayTransaction(txObj: PlainTransaction) {
@@ -138,32 +146,6 @@ export class NanoApi {
         return tx.serializedSize;
     }
 
-    public async connect() {
-        await this._apiInitialized;
-
-        try {
-            Nimiq.GenesisConfig[this._config.network]();
-        } catch (e) {}
-
-        // Uses volatileNano to enable more than one parallel network iframe
-        this._consensus = await Nimiq.Consensus.volatileNano();
-        this._consensus.on('syncing', e => this.onConsensusSyncing());
-        this._consensus.on('established', e => this.__consensusEstablished());
-        this._consensus.on('lost', e => this.consensusLost());
-
-        this._consensus.on('transaction-relayed', tx => this.transactionRelayed(tx));
-
-        this._consensus.network.connect();
-
-        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
-        this._consensus.mempool.on('transaction-added', tx => this.transactionAdded(tx));
-        this._consensus.mempool.on('transaction-expired', tx => this.transactionExpired(tx));
-        this._consensus.mempool.on('transaction-mined', (tx, header) => this.transactionMined(tx, header));
-        this._consensus.network.on('peers-changed', () => this.onPeersChanged());
-
-        return true;
-    }
-
     public async subscribe(addresses: string | string[]) {
         if (!(addresses instanceof Array)) addresses = [addresses];
         this.subscribeAddresses(addresses);
@@ -181,20 +163,20 @@ export class NanoApi {
     }
 
     public async getAccountTypeString(address: string): Promise<string | boolean> {
-        const account = (await this._getAccounts([address]))[0];
+        const account = (await this.getAccounts([address]))[0];
 
-        if (!account) return 'basic';
+        if (!account) return AccountType.BASIC;
 
         // See Nimiq.Account.Type
         switch (account.type) {
-            case Nimiq.Account.Type.BASIC: return 'basic';
-            case Nimiq.Account.Type.VESTING: return 'vesting';
-            case Nimiq.Account.Type.HTLC: return 'htlc';
+            case Nimiq.Account.Type.BASIC: return AccountType.BASIC;
+            case Nimiq.Account.Type.VESTING: return AccountType.VESTING;
+            case Nimiq.Account.Type.HTLC: return AccountType.HTLC;
             default: return false;
         }
     }
 
-    public async getGenesisVestingContracts() {
+    public async getGenesisVestingContracts(): Promise<PlainVestingContract[]> {
         await this._apiInitialized;
         const contracts = [];
         const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
@@ -225,13 +207,199 @@ export class NanoApi {
         return true;
     }
 
+    public async requestTransactionHistory(
+        addresses: string | string[],
+        knownReceipts: Map<string, Map<string, string>>,
+        fromHeight?: number,
+    ): Promise<{
+        newTransactions: DetailedPlainTransaction[],
+        removedTransactions: string[],
+        unresolvedTransactions: TransactionReceipt[],
+    }> {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+
+        let results = await Promise.all(addresses.map(address => this._requestTransactionHistory(address, knownReceipts.get(address), fromHeight)));
+
+        // txs is an array of objects of arrays, which have the format {transaction: Nimiq.Transaction, header: Nimiq.BlockHeader}
+        // We need to reduce this to usable simple tx objects
+
+        // Construct arrays with their relavant information
+        let txs = results.map(r => r.transactions);
+        let removedTxs = results.map(r => r.removedTxHashes);
+        let unresolvedTxs = results.map(r => r.unresolvedReceipts);
+
+        // First, reduce
+        const reducedTxs = txs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+        const reducedRemovedTxs = removedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+        const reducedUnresolvedTxs = unresolvedTxs.reduce((flat, it) => it ? flat.concat(it) : flat, []);
+
+        // Then map to simple objects
+        let plainTransactions = reducedTxs.map(tx => ({
+            sender: tx.transaction.sender.toUserFriendlyAddress(),
+            recipient: tx.transaction.recipient.toUserFriendlyAddress(),
+            value: Nimiq.Policy.satoshisToCoins(tx.transaction.value),
+            fee: Nimiq.Policy.satoshisToCoins(tx.transaction.fee),
+            extraData: tx.transaction.data,
+            hash: tx.transaction.hash().toBase64(),
+            blockHeight: tx.header.height,
+            blockHash: tx.header.hash().toBase64(),
+            timestamp: tx.header.timestamp,
+            validityStartHeight: tx.validityStartHeight
+        }));
+
+        // Remove duplicate txs
+        const _txHashes = plainTransactions.map(tx => tx.hash);
+        plainTransactions = plainTransactions.filter((tx, index) => {
+            return _txHashes.indexOf(tx.hash) === index;
+        });
+
+        return {
+            newTransactions: plainTransactions,
+            removedTransactions: reducedRemovedTxs,
+            unresolvedTransactions: reducedUnresolvedTxs, 
+        };
+    }
+
+    protected fire(event: string, data?: any) {
+        throw new Error('The fire() method needs to be overloaded!');
+    }
+
+    private get apiUrl() { return this._config.cdn }
+
+    private async _requestTransactionHistory(address: string, knownReceipts = new Map<string, string>(), fromHeight = 0):
+        Promise<{
+            transactions: any[],
+            removedTxHashes: string[],
+            unresolvedReceipts: TransactionReceipt[],
+        }>
+    {
+        await this._consensusEstablished;
+        const addressBuffer = Nimiq.Address.fromUserFriendlyAddress(address);
+
+        // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
+
+        // 1. Get transaction receipts.
+        let receipts: TransactionReceipt[] | null = null;
+        let retryCounter = 1;
+        while (!(receipts instanceof Array)) {
+            // Return after the 3rd try
+            if (retryCounter >= 4) return {
+                transactions: [],
+                removedTxHashes: [],
+                unresolvedReceipts: []
+            };
+
+            try {
+                // @ts-ignore _requestTransactionReceipts is private currently
+                receipts = await this._consensus._requestTransactionReceipts(addressBuffer);
+            } catch(e) {
+                await new Promise(res => setTimeout(res, 1000)); // wait 1 sec until retry
+            }
+
+            retryCounter++;
+        }
+
+        // 2a. Filter out removed transactions
+        const knownTxHashes = [...knownReceipts.keys()];
+
+        // The JungleDB does currently not support TransactionReceiptsMessage's offset parameter.
+        // Thus, when the limit is returned, we can make no assumption about removed transactions.
+        // TODO: FIXME when offset is enabled
+        let removedTxHashes = [] as string[];
+        if (receipts.length === Nimiq.TransactionReceiptsMessage.RECEIPTS_MAX_COUNT) {
+            console.warn('Maximum number of receipts returned, cannot determine removed transactions. Transaction history is likely incomplete.');
+        } else {
+            const receiptTxHashes = receipts.map(r => r.transactionHash.toBase64());
+            removedTxHashes = knownTxHashes.filter(knownTxHash => !receiptTxHashes.includes(knownTxHash));
+        }
+
+        // 2b. Filter out known receipts.
+        receipts = receipts.filter(receipt => {
+            if (receipt.blockHeight < fromHeight) return false;
+
+            const hash = receipt.transactionHash.toBase64();
+
+            // Known transaction
+            if (knownTxHashes.includes(hash)) {
+                // Check if block has changed
+                return receipt.blockHash.toBase64() !== knownReceipts.get(hash);
+            }
+
+            // Unknown transaction
+            return true;
+        })
+        // Sort in reverse, to resolve recent transactions first
+        .sort((a, b) => b.blockHeight - a.blockHeight);
+
+        // console.log(`Reduced to ${receipts.length} unknown receipts.`);
+
+        const unresolvedReceipts = [] as TransactionReceipt[];
+
+        // 3. Request proofs for missing blocks.
+        /** @type {Array.<Promise.<Block>>} */
+        const blockRequests = [];
+        let lastBlockHash = null;
+        for (const receipt of receipts) {
+            if (!receipt.blockHash.equals(lastBlockHash)) {
+                // eslint-disable-next-line no-await-in-loop
+                // @ts-ignore private method access
+                const block = await this._consensus._blockchain.getBlock(receipt.blockHash);
+                if (block) {
+                    blockRequests.push(Promise.resolve(block));
+                } else {
+                    // @ts-ignore private method access
+                    const request = this._consensus._requestBlockProof(receipt.blockHash, receipt.blockHeight)
+                        .catch((e: Error) => {
+                            unresolvedReceipts.push(receipt);
+                            console.error(NanoApi, `Failed to retrieve proof for block ${receipt.blockHash}`
+                                + ` (${e}) - transaction history may be incomplete`)
+                        });
+                    blockRequests.push(request);
+                }
+
+                lastBlockHash = receipt.blockHash;
+            }
+        }
+        const blocks = await Promise.all(blockRequests);
+
+        // console.log(`Transactions are in ${blocks.length} blocks`);
+        // if (unresolvedReceipts.length) console.log(`Could not get block for ${unresolvedReceipts.length} receipts`);
+
+        // 4. Request transaction proofs.
+        const transactionRequests = [];
+        for (const block of blocks) {
+            if (!block) continue;
+
+            // @ts-ignore private method access
+            const request = this._consensus._requestTransactionsProof([addressBuffer], block)
+                .then((txs: any) => txs.map((tx: any) => ({ transaction: tx, header: block.header })))
+                .catch((e: Error) => console.error(NanoApi, `Failed to retrieve transactions for block ${block.hash()}`
+                    + ` (${e}) - transaction history may be incomplete`));
+            transactionRequests.push(request);
+        }
+
+        const transactions = await Promise.all(transactionRequests);
+
+        // Reverse array, so that oldest transactions are first
+        transactions.reverse();
+        unresolvedReceipts.reverse();
+
+        return {
+            transactions: transactions
+                .reduce((flat, it) => it ? flat.concat(it) : flat, [])
+                .sort((a: any, b: any) => a.header.height - b.header.height),
+            removedTxHashes,
+            unresolvedReceipts
+        };
+    }
+
     private async _headChanged(header: any) {
         if (!this._consensus.established) return;
         this.recheckBalances();
         this.onHeadChange(header);
     }
 
-    private async _getAccounts(addresses: string[], stackHeight = 0): Promise<Nimiq.Account[]> {
+    private async getAccounts(addresses: string[], stackHeight = 0): Promise<Nimiq.Account[]> {
         if (addresses.length === 0) return [];
 
         await this._consensusEstablished;
@@ -246,7 +414,7 @@ export class NanoApi {
             return await new Promise<Nimiq.Account[]>(resolve => {
                 const timeout = 1000 * stackHeight;
                 setTimeout(async _ => {
-                    resolve(await this._getAccounts(addresses, stackHeight));
+                    resolve(await this.getAccounts(addresses, stackHeight));
                 }, timeout);
                 console.warn(`Could not retrieve accounts from consensus, retrying in ${timeout / 1000} s`);
             });
@@ -262,7 +430,7 @@ export class NanoApi {
     }
 
     private async getBalances(addresses: string[]): Promise<Map<string, number>> {
-        let accounts = await this._getAccounts(addresses);
+        let accounts = await this.getAccounts(addresses);
 
         const balances = new Map();
 
@@ -355,7 +523,9 @@ export class NanoApi {
             this._balances.set(address, balance);
         }
 
-        if (balances.size) this.onBalancesChanged(balances);
+        if (balances.size) {
+            this.onBalancesChanged(balances);
+        }
     }
 
     private getPendingAmount(address: string) {
@@ -512,7 +682,7 @@ export class NanoApi {
         this.fire('nimiq-peer-count', this._consensus.network.peerCount);
     }
 
-    private importApi() {
+    private async importApi() {
         return new Promise((resolve, reject) => {
             let script = document.createElement('script');
             script.type = 'text/javascript';
