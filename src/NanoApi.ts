@@ -599,27 +599,27 @@ export class NanoApi {
     }
 
     private onInitialized() {
-        this.fire('nimiq-api-ready');
+        this.fire(Events.API_READY);
     }
 
     private onConsensusSyncing() {
         console.log('consensus syncing');
-        this.fire('nimiq-consensus-syncing');
+        this.fire(Events.CONSENSUS_SYNCING);
     }
 
     private onConsensusEstablished() {
         console.log('consensus established');
-        this.fire('nimiq-consensus-established');
+        this.fire(Events.CONSENSUS_ESTABLISHED);
     }
 
     private onConsensusLost() {
         console.log('consensus lost');
-        this.fire('nimiq-consensus-lost');
+        this.fire(Events.CONSENSUS_LOST);
     }
 
     private onBalancesChanged(balances: Map<string, number>) {
         // console.log('new balances:', balances);
-        this.fire('nimiq-balances', balances);
+        this.fire(Events.BALANCES_CHANGED, balances);
     }
 
     private onTransactionPending(
@@ -631,11 +631,11 @@ export class NanoApi {
         hash: string,
         validityStartHeight: number,
     ) {
-        this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
+        this.fire(Events.TRANSACTION_PENDING, { sender, recipient, value, fee, extraData, hash, validityStartHeight });
     }
 
     private onTransactionExpired(hash: string) {
-        this.fire('nimiq-transaction-expired', hash);
+        this.fire(Events.TRANSACTION_EXPIRED, hash);
     }
 
     private onTransactionMined(
@@ -650,7 +650,7 @@ export class NanoApi {
         validityStartHeight: number,
         ) {
         // console.log('mined:', { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
-        this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
+        this.fire(Events.TRANSACTION_MINED, { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
     }
 
     private onTransactionRelayed(
@@ -663,23 +663,23 @@ export class NanoApi {
         validityStartHeight: number,
     ) {
         console.log('relayed:', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
-        this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
+        this.fire(Events.TRANSACTION_RELAYED, { sender, recipient, value, fee, extraData, hash, validityStartHeight });
     }
 
     private onInitializationError(e: Error) {
         console.error('Nimiq API could not be initialized:', e);
-        this.fire('nimiq-api-fail', e);
+        this.fire(Events.API_FAIL, e);
     }
 
     private onHeadChange(header: Nimiq.BlockHeader & { difficulty: number} ) { // FIXME probably not the exact type of header
-        this.fire('nimiq-head-change', {
+        this.fire(Events.HEAD_CHANGE, {
             height: header.height,
             globalHashrate: this.globalHashrate(header.difficulty)
         });
     }
 
     private onPeersChanged() {
-        this.fire('nimiq-peer-count', this._consensus.network.peerCount);
+        this.fire(Events.PEERS_CHANGED, this._consensus.network.peerCount);
     }
 
     private async importApi() {
