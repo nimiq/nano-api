@@ -105,7 +105,7 @@ export class NanoApi {
 
         this._consensus.network.connect();
 
-        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
+        this._consensus.blockchain.on('head-changed', block => this.headChanged(block.header));
         this._consensus.mempool.on('transaction-added', tx => this.transactionAdded(tx));
         this._consensus.mempool.on('transaction-expired', tx => this.transactionExpired(tx));
         this._consensus.mempool.on('transaction-mined', (tx, header) => this.transactionMined(tx, header));
@@ -393,7 +393,7 @@ export class NanoApi {
         };
     }
 
-    private async _headChanged(header: any) {
+    private async headChanged(header: any) {
         if (!this._consensus.established) return;
         this.recheckBalances();
         this.onHeadChange(header);
@@ -445,7 +445,7 @@ export class NanoApi {
 
     private __consensusEstablished() {
         this._consensusEstablishedResolver();
-        this._headChanged(this._consensus.blockchain.head);
+        this.headChanged(this._consensus.blockchain.head);
         this.onConsensusEstablished();
     }
 
