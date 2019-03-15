@@ -1,5 +1,4 @@
 import { Utf8Tools } from '@nimiq/utils';
-import { TransactionReceipt } from '@nimiq/core-web';
 
 type Config = { cdn: string, network: 'main' | 'test' | 'dev' };
 
@@ -215,7 +214,7 @@ export class NanoApi {
     ): Promise<{
         newTransactions: DetailedPlainTransaction[],
         removedTransactions: string[],
-        unresolvedTransactions: TransactionReceipt[],
+        unresolvedTransactions: Nimiq.TransactionReceipt[],
     }> {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
@@ -271,7 +270,7 @@ export class NanoApi {
         Promise<{
             transactions: any[],
             removedTxHashes: string[],
-            unresolvedReceipts: TransactionReceipt[],
+            unresolvedReceipts: Nimiq.TransactionReceipt[],
         }>
     {
         await this._consensusEstablished;
@@ -280,7 +279,7 @@ export class NanoApi {
         // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
 
         // 1. Get transaction receipts.
-        let receipts: TransactionReceipt[] | null = null;
+        let receipts: Nimiq.TransactionReceipt[] | null = null;
         let retryCounter = 1;
         while (!(receipts instanceof Array)) {
             // Return after the 3rd try
@@ -334,7 +333,7 @@ export class NanoApi {
 
         // console.log(`Reduced to ${receipts.length} unknown receipts.`);
 
-        const unresolvedReceipts = [] as TransactionReceipt[];
+        const unresolvedReceipts = [] as Nimiq.TransactionReceipt[];
 
         // 3. Request proofs for missing blocks.
         /** @type {Array.<Promise.<Block>>} */
