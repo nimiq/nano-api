@@ -96,7 +96,7 @@ export class NanoApi {
 
         // Uses volatilePico/Nano to enable more than one parallel network iframe
         // @ts-ignore pico not yet typed
-        this._consensus = Nimiq.Consensus.pico ? await Nimiq.Consensus.pico() : await Nimiq.Consensus.volatileNano();
+        this._consensus = Nimiq.Consensus.volatilePico ? await Nimiq.Consensus.volatilePico() : await Nimiq.Consensus.volatileNano();
         this._consensus.on('syncing', e => this.onConsensusSyncing());
         this._consensus.on('established', e => this.__consensusEstablished());
         this._consensus.on('lost', e => this.consensusLost());
