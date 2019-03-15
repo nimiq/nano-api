@@ -340,7 +340,8 @@ export class NanoApi {
         const blockRequests = [];
         let lastBlockHash = null;
         for (const receipt of receipts) {
-            if (!receipt.blockHash.equals(lastBlockHash)) {
+            // FIXME remove cast after fix in core types
+            if (!receipt.blockHash.equals(lastBlockHash as Nimiq.Serializable)) {
                 // eslint-disable-next-line no-await-in-loop
                 // @ts-ignore private method access
                 const block = await this._consensus._blockchain.getBlock(receipt.blockHash);
