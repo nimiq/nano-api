@@ -19,7 +19,7 @@
     "@nimiq/utils": "^0.2.0"
   },
   "devDependencies": {
-    "@nimiq/core-types": "^1.4.2",
+    "@nimiq/core-types": "^1.4.3",
     "rollup": "^0.65.0",
     "typescript": "^3.3.3333"
   }
