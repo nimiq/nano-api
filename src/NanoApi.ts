@@ -344,7 +344,7 @@ export class NanoApi {
             if (!receipt.blockHash.equals(lastBlockHash as Nimiq.Serializable)) {
                 // eslint-disable-next-line no-await-in-loop
                 // @ts-ignore private method access
-                const block = await this._consensus._blockchain.getBlock(receipt.blockHash);
+                const block = await this._consensus.blockchain.getBlock(receipt.blockHash);
                 if (block) {
                     blockRequests.push(Promise.resolve(block));
                 } else {
