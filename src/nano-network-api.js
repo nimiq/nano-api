@@ -652,7 +652,7 @@ export class NanoNetworkApi {
 
     async _createBasicTransactionFromObject(obj) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
@@ -664,7 +664,7 @@ export class NanoNetworkApi {
 
     async _createExtendedTransactionFromObject(obj) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
         const senderAddr = senderPubKey.toAddress();
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
@@ -690,7 +690,7 @@ export class NanoNetworkApi {
 
     async _createVestingTransactionFromObject(obj) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
         const recipientAddr = senderPubKey.toAddress();
         const senderAddr = Nimiq.Address.fromUserFriendlyAddress(obj.sender);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
