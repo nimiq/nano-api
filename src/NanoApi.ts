@@ -4,7 +4,8 @@ type Config = { cdn: string, network: 'main' | 'test' | 'dev' };
 
 export type PlainTransaction = {
     sender: string,
-    senderPubKey: Uint8Array,
+    senderPubKey?: Uint8Array,
+    signerPublicKey?: Uint8Array,
     recipient: string,
     value: number, // in NIM
     fee: number, // IN NIM
@@ -255,7 +256,7 @@ export class NanoApi {
         return {
             newTransactions: plainTransactions,
             removedTransactions: reducedRemovedTxs,
-            unresolvedTransactions: reducedUnresolvedTxs, 
+            unresolvedTransactions: reducedUnresolvedTxs,
         };
     }
 
@@ -536,7 +537,7 @@ export class NanoApi {
 
     private async createBasicTransactionFromObject(obj: any) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
@@ -548,7 +549,7 @@ export class NanoApi {
 
     private async createExtendedTransactionFromObject(obj: any) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
         const senderAddr = senderPubKey.toAddress();
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
@@ -574,7 +575,7 @@ export class NanoApi {
 
     private async createVestingTransactionFromObject(obj: any) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey));
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
         const recipientAddr = senderPubKey.toAddress();
         const senderAddr = Nimiq.Address.fromUserFriendlyAddress(obj.sender);
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
@@ -646,7 +647,7 @@ export class NanoApi {
         extraData: string | Uint8Array,
         hash: string,
         blockHeight: number,
-        timestamp: any, // FIXME add type 
+        timestamp: any, // FIXME add type
         validityStartHeight: number,
         ) {
         // console.log('mined:', { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
