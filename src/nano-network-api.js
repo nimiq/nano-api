@@ -349,6 +349,12 @@ export class NanoNetworkApi {
         };
     }
 
+    async requestTransactionReceipts(address) {
+        const addressBuffer = Nimiq.Address.fromUserFriendlyAddress(address);
+        // @ts-ignore _requestTransactionReceipts is private currently
+        return this._consensus._requestTransactionReceipts(addressBuffer);
+    }
+
     async getGenesisVestingContracts() {
         await this._apiInitialized;
         const contracts = [];
