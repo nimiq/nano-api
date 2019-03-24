@@ -260,6 +260,12 @@ export class NanoApi {
         };
     }
 
+    public async requestTransactionReceipts(address: string): Promise<Nimiq.TransactionReceipt> {
+        const addressBuffer = Nimiq.Address.fromUserFriendlyAddress(address);
+        // @ts-ignore _requestTransactionReceipts is private currently
+        return this._consensus._requestTransactionReceipts(addressBuffer);
+    }
+
     protected fire(event: string, data?: any) {
         throw new Error('The fire() method needs to be overloaded!');
     }
