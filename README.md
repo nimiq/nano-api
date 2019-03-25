@@ -1,3 +1,6 @@
+# [To be Deprecated Soon]
+While this library is still in use in our applications, we don't recommend to use it, as it is going to be deprecated soon. Instead, please refer to https://nimiq.com/developers/#tutorials.
+
 # Nano Api
 A high-level API to the Nimiq nano client. This is intended to be the basis for nimiq wallet applications. 
 
