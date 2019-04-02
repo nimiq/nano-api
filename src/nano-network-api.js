@@ -41,8 +41,10 @@ export class NanoNetworkApi {
     /**
      *  @param {Object} txObj: {
      *         sender: <user friendly address>,
+     *         senderType: <Nimiq.Account.Type?>,
      *         senderPubKey: <serialized public key>,
      *         recipient: <user friendly address>,
+     *         recipientType: <Nimiq.Account.Type?>,
      *         value: <value in NIM>,
      *         fee: <fee in NIM>,
      *         validityStartHeight: <integer>,
@@ -53,19 +55,7 @@ export class NanoNetworkApi {
      */
     async relayTransaction(txObj) {
         await this._consensusEstablished;
-        let tx;
-
-        if (typeof txObj.extraData === 'string') {
-            txObj.extraData = Utf8Tools.stringToUtf8ByteArray(txObj.extraData);
-        }
-
-        if (txObj.isVesting) {
-            tx = await this._createVestingTransactionFromObject(txObj);
-        } else if (txObj.extraData && txObj.extraData.length > 0) {
-            tx = await this._createExtendedTransactionFromObject(txObj);
-        } else {
-            tx = await this._createBasicTransactionFromObject(txObj);
-        }
+        const tx = await this._createTransactionFromObject(txObj);
         // console.log("Debug: transaction size was:", tx.serializedSize);
         this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
         this._consensus.relayTransaction(tx);
@@ -78,12 +68,7 @@ export class NanoNetworkApi {
      */
     async getTransactionSize(txObj) {
         await this._apiInitialized;
-        let tx;
-        if (txObj.extraData && txObj.extraData.length > 0) {
-            tx = await this._createExtendedTransactionFromObject(txObj);
-        } else {
-            tx = await this._createBasicTransactionFromObject(txObj);
-        }
+        const tx = await this._createTransactionFromObject(txObj);
         return tx.serializedSize;
     }
 
@@ -380,7 +365,7 @@ export class NanoNetworkApi {
     }
 
     async removeTxFromMempool(txObj) {
-        const tx = await this._createBasicTransactionFromObject(txObj);
+        const tx = await this._createTransactionFromObject(txObj);
         this._consensus.mempool.removeTransaction(tx);
         return true;
     }
@@ -656,6 +641,22 @@ export class NanoNetworkApi {
         return pendingAmount;
     }
 
+    async _createTransactionFromObject(txObj) {
+        if (typeof txObj.extraData === 'string') {
+            txObj.extraData = Utf8Tools.stringToUtf8ByteArray(txObj.extraData);
+        }
+
+        if (
+            (txObj.extraData && txObj.extraData.length > 0)
+            || txObj.senderType
+            || txObj.recipientType
+        ) {
+            return this._createExtendedTransactionFromObject(txObj);
+        } else {
+            return this._createBasicTransactionFromObject(txObj);
+        }
+    }
+
     async _createBasicTransactionFromObject(obj) {
         await this._apiInitialized;
         const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
@@ -683,34 +684,8 @@ export class NanoNetworkApi {
         const serializedProof = proof.serialize();
 
         return new Nimiq.ExtendedTransaction(
-            senderAddr,    Nimiq.Account.Type.BASIC,
-            recipientAddr, Nimiq.Account.Type.BASIC,
-            value,
-            fee,
-            validityStartHeight,
-            Nimiq.Transaction.Flag.NONE,
-            data,
-            serializedProof
-        );
-    }
-
-    async _createVestingTransactionFromObject(obj) {
-        await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
-        const recipientAddr = senderPubKey.toAddress();
-        const senderAddr = Nimiq.Address.fromUserFriendlyAddress(obj.sender);
-        const value = Nimiq.Policy.coinsToSatoshis(obj.value);
-        const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
-        const validityStartHeight = parseInt(obj.validityStartHeight);
-        const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
-        const data = obj.extraData;
-
-        const proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature);
-        const serializedProof = proof.serialize();
-
-        return new Nimiq.ExtendedTransaction(
-            senderAddr,    Nimiq.Account.Type.VESTING,
-            recipientAddr, Nimiq.Account.Type.BASIC,
+            senderAddr,    obj.senderType || Nimiq.Account.Type.BASIC,
+            recipientAddr, obj.recipientType || Nimiq.Account.Type.BASIC,
             value,
             fee,
             validityStartHeight,
