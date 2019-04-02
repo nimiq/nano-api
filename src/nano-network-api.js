@@ -671,27 +671,31 @@ export class NanoNetworkApi {
 
     async _createExtendedTransactionFromObject(obj) {
         await this._apiInitialized;
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
         const senderAddr = Nimiq.Address.fromUserFriendlyAddress(obj.sender);
+        const senderType = obj.senderType || Nimiq.Account.Type.BASIC;
         const recipientAddr = Nimiq.Address.fromUserFriendlyAddress(obj.recipient);
+        const recipientType = obj.recipientType || Nimiq.Account.Type.BASIC;
         const value = Nimiq.Policy.coinsToSatoshis(obj.value);
         const fee = Nimiq.Policy.coinsToSatoshis(obj.fee);
         const validityStartHeight = parseInt(obj.validityStartHeight);
-        const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
+        const flags = obj.flags || Nimiq.Transaction.Flag.NONE;
         const data = obj.extraData;
 
+        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
+        const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
         const proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature);
-        const serializedProof = proof.serialize();
 
         return new Nimiq.ExtendedTransaction(
-            senderAddr,    obj.senderType || Nimiq.Account.Type.BASIC,
-            recipientAddr, obj.recipientType || Nimiq.Account.Type.BASIC,
+            senderAddr,
+            senderType,
+            recipientAddr,
+            recipientType,
             value,
             fee,
             validityStartHeight,
-            Nimiq.Transaction.Flag.NONE,
+            flags,
             data,
-            serializedProof
+            proof.serialize(),
         );
     }
 
