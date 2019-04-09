@@ -27,6 +27,9 @@ export class NanoNetworkApi {
 
         /** @type {boolean} */
         this._shouldConnect = true;
+
+        /** @type {Nimiq.BlockHeader|null} */
+        this._knownHead = null;
     }
 
     get apiUrl() { return this._config.cdn }
@@ -429,9 +432,12 @@ export class NanoNetworkApi {
     }
 
     async _headChanged(header) {
-        if (!this._consensus.established) return;
-        this._recheckBalances();
+        if (!this._consensus.established || (this._knownHead && this._knownHead.equals(header))) return;
+        const isConsensusHead = !this._knownHead;
+        this._knownHead = header;
         this._onHeadChange(header);
+        if (isConsensusHead) return; // no need to recheck balances when we just reached consensus
+        this._recheckBalances();
     }
 
     /**
@@ -615,7 +621,7 @@ export class NanoNetworkApi {
 
     __consensusEstablished() {
         this._consensusEstablishedResolver();
-        this._headChanged(this._consensus.blockchain.head);
+        this._headChanged(this._consensus.blockchain.head.header);
         this._onConsensusEstablished();
     }
 
