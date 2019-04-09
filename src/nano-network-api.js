@@ -75,32 +75,34 @@ export class NanoNetworkApi {
     async connect() {
         this._shouldConnect = true;
         await this._apiInitialized;
-        if (!this._shouldConnect) return;
+        if (!this._shouldConnect || (this._consensus && this._consensus.network._autoConnect)) return;
 
         try {
             Nimiq.GenesisConfig[this._config.network]();
         } catch (e) {}
 
-        // Uses volatileNano to enable more than one parallel network iframe
-        this._consensus = await Nimiq.Consensus.volatileNano();
-        this._consensus.on('syncing', e => this._onConsensusSyncing());
-        this._consensus.on('established', e => this.__consensusEstablished());
-        this._consensus.on('lost', e => this._consensusLost());
+        if (!this._consensus) {
+            // Uses volatileNano to enable more than one parallel network iframe
+            this._consensus = await Nimiq.Consensus.volatileNano();
 
-        this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
+            this._consensus.on('syncing', e => this._onConsensusSyncing());
+            this._consensus.on('established', e => this.__consensusEstablished());
+            this._consensus.on('lost', e => this._consensusLost());
 
-        // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
-        // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
-        // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
-        // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
+            this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
 
+            // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
+            // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
+            // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
+            // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
+
+            this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
+            this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
+            this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
+            this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
+            this._consensus.network.on('peers-changed', () => this._onPeersChanged());
+        }
         this._consensus.network.connect();
-
-        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
-        this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
-        this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
-        this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
-        this._consensus.network.on('peers-changed', () => this._onPeersChanged());
 
         return true;
     }
