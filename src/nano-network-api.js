@@ -113,31 +113,35 @@ export class NanoNetworkApi {
         /** @type {Map<string, number>} */
         const picoBalances = new Map();
 
-        const balances = await new Promise(async (resolve) => {
-            await this._apiInitialized;
+        /** @type {Nimiq.Address[]} */
+        const addresses = userFriendlyAddresses.map((address) => Nimiq.Address.fromUserFriendlyAddress(address));
 
-            /** @type {Nimiq.Address[]} */
-            const addresses = userFriendlyAddresses.map((address) => Nimiq.Address.fromUserFriendlyAddress(address));
+        await this._apiInitialized;
 
-            try {
-                Nimiq.GenesisConfig[this._config.network]();
-            } catch (e) {}
+        try {
+            Nimiq.GenesisConfig[this._config.network]();
+        } catch (e) {}
 
-            // Uses volatileNano to enable more than one parallel network iframe
-            this._consensus = await Nimiq.Consensus.volatileNano();
-            this._bindEvents();
-            const networkConfig = this._consensus.network.config;
+        // Uses volatileNano to enable more than one parallel network iframe
+        this._consensus = await Nimiq.Consensus.volatileNano();
+        this._bindEvents();
+        const networkConfig = this._consensus.network.config;
 
+        const balances = await new Promise(async (resolve, reject) => {
             let resolved = false;
             let usingFallback = false;
 
             const fallbackToNanoConsensus = async () => {
                 if (resolved || usingFallback) return;
                 usingFallback = true;
-                await this.connect();
-                const balances = await this.getBalance(userFriendlyAddresses);
-                resolved = true;
-                resolve(balances);
+                try {
+                    await this.connect();
+                    const balances = await this.getBalance(userFriendlyAddresses);
+                    resolved = true;
+                    resolve(balances);
+                } catch (e) {
+                    reject(e);
+                }
             };
 
             const onChannelHead = (channel, header) => {
