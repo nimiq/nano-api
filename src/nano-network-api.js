@@ -101,11 +101,9 @@ export class NanoNetworkApi {
      * @returns {Promise<Map<string, number>>}
      */
     async connectPico(userFriendlyAddresses = []) {
-        if (this._consensus) {
-            // stay on the current consensus, no matter whether it's pico or nano
-            return this.getBalance(userFriendlyAddresses);
-        }
+        await this._apiInitialized;
 
+        const establishedChannels = [];
         const picoHeads = [];
         let currentHead = null;
         /** @type {Nimiq.PeerChannel[]} */
@@ -113,19 +111,37 @@ export class NanoNetworkApi {
         /** @type {Map<string, number>} */
         const picoBalances = new Map();
 
+        if (this._consensus) {
+            if (this._consensus.established) {
+                // already consensus established
+                const balances = await this.getBalance(userFriendlyAddresses);
+                for (const [address, balance] of balances) { this._balances.set(address, balance); }
+                return balances;
+            } else {
+                // hook into the current sync process
+                for (const agent of this._consensus._agents.valueIterator()) {
+                    if (Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)) continue;
+                    // Note that for all agents known to the consensus a channel is currently established.
+                    // Agents with closed connections get automatically evicted.
+                    establishedChannels.push(agent.peer.channel);
+                    if (establishedChannels.length === 4) break;
+                }
+            }
+        } else {
+            try {
+                Nimiq.GenesisConfig[this._config.network]();
+            } catch (e) {}
+
+            // Uses volatileNano to enable more than one parallel network iframe
+            this._consensus = await Nimiq.Consensus.volatileNano();
+            this._bindEvents();
+        }
+
+        const network = this._consensus.network;
+        const networkConfig = network.config;
+
         /** @type {Nimiq.Address[]} */
         const addresses = userFriendlyAddresses.map((address) => Nimiq.Address.fromUserFriendlyAddress(address));
-
-        await this._apiInitialized;
-
-        try {
-            Nimiq.GenesisConfig[this._config.network]();
-        } catch (e) {}
-
-        // Uses volatileNano to enable more than one parallel network iframe
-        this._consensus = await Nimiq.Consensus.volatileNano();
-        this._bindEvents();
-        const networkConfig = this._consensus.network.config;
 
         const balances = await new Promise(async (resolve, reject) => {
             let resolved = false;
@@ -134,6 +150,7 @@ export class NanoNetworkApi {
             const fallbackToNanoConsensus = async () => {
                 if (resolved || usingFallback) return;
                 usingFallback = true;
+                console.debug('[Pico] Using Nano fallback.');
                 try {
                     await this.connect();
                     const balances = await this.getBalance(userFriendlyAddresses);
@@ -221,7 +238,7 @@ export class NanoNetworkApi {
 
             // TODO: Store randomly chosen seeds here to not connect twice to the same
 
-            for (let i = 0; i < 4; i++) {
+            for (let i = 0; i < 4 - establishedChannels.length; i++) {
                 const connector = new Nimiq.WebSocketConnector(Nimiq.Protocol.WSS, 'wss', networkConfig);
 
                 connector.on('connection', (conn) => {
@@ -258,6 +275,7 @@ export class NanoNetworkApi {
             }, 5000);
         });
 
+        establishedChannels.splice(0, establishedChannels.length);
         picoHeads.splice(0, picoHeads.length);
         currentHead = null;
         picoChannels.splice(0, picoChannels.length);
