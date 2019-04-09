@@ -439,7 +439,12 @@ export class NanoNetworkApi {
      */
     async _getAccounts(addresses, stackHeight) {
         if (addresses.length === 0) return [];
-        await this._consensusEstablished;
+        // checking for real (nano) consensus here instead of this._consensusEstablished as it doesn't work with pico
+        if (!this._consensus.established) {
+            let listenerId;
+            await new Promise(resolve => listenerId = this._consensus.on('established', resolve));
+            this._consensus.off('established', listenerId);
+        }
         let accounts;
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
         try {
