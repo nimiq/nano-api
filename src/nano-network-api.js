@@ -128,14 +128,18 @@ export class NanoNetworkApi {
             let currentHead = null;
             /** @type {Map<string, number>} */
             const picoBalances = new Map();
+
             let resolved = false;
+            let usingFallback = false;
 
             const fallbackToNanoConsensus = async () => {
-                this.connect()
+                if (resolved || usingFallback) return;
+                usingFallback = true;
+                await this.connect();
                 const balances = await this.getBalance(userFriendlyAddresses);
-                resolve(balances);
                 resolved = true;
-            }
+                resolve(balances);
+            };
 
             const onChannelHead = (channel, header) => {
                 this._picoChannels.push(channel);
@@ -237,7 +241,7 @@ export class NanoNetworkApi {
             }
 
             setTimeout(() => {
-                if (resolved) return;
+                if (resolved || usingFallback) return;
                 fallbackToNanoConsensus();
             }, 5000);
         });
