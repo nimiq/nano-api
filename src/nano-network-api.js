@@ -207,6 +207,9 @@ export class NanoNetworkApi {
                             resolved = true;
                             resolve(new Map(picoBalances)); // create a copy to be able to clear picoBalances map
                             this.__consensusEstablished();
+                            // upgrade to normal nano consensus to enable housekeeping in Network and to reconnect
+                            // automatically in case of lost connection
+                            this.connect();
                         }
                     }
                 }
