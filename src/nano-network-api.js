@@ -223,15 +223,22 @@ export class NanoNetworkApi {
                     const agent = new Nimiq.NetworkAgent(this._consensus.blockchain, this._consensus.network.addresses,
                         networkConfig, channel);
                     let header = null;
+
+                    // Note that we stop the pico consensus checks once a consensus was reached (either by pico or nano
+                    // fallback). However, during nano fallback, we keep them alive as we might still get to a pico
+                    // consensus before the nano consensus.
                     channel.on('head', (msg) => {
+                        if (resolved) return;
                         header = msg.header;
                         console.debug(`[Pico] Current height is ${header.height}`);
                         onChannelHead(channel, header);
                     });
                     channel.on('accounts-proof', (msg) => {
+                        if (resolved) return;
                         onBalancesMsg(msg);
                     })
                     agent.on('handshake', () => {
+                        if (resolved) return;
                         channel.getHead();
                     });
                 });
