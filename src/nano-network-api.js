@@ -104,7 +104,9 @@ export class NanoNetworkApi {
      * @returns {Promise<Map<string, number>>}
      */
     async connectPico(userFriendlyAddresses = []) {
+        this._shouldConnect = true;
         await this._apiInitialized;
+        if (!this._shouldConnect) return new Map();
 
         const establishedChannels = [];
         const picoHeads = [];
