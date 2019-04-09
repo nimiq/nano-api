@@ -84,23 +84,7 @@ export class NanoNetworkApi {
         if (!this._consensus) {
             // Uses volatileNano to enable more than one parallel network iframe
             this._consensus = await Nimiq.Consensus.volatileNano();
-
-            this._consensus.on('syncing', e => this._onConsensusSyncing());
-            this._consensus.on('established', e => this.__consensusEstablished());
-            this._consensus.on('lost', e => this._consensusLost());
-
-            this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
-
-            // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
-            // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
-            // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
-            // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
-
-            this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
-            this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
-            this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
-            this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
-            this._consensus.network.on('peers-changed', () => this._onPeersChanged());
+            this._bindEvents();
         }
         this._consensus.network.connect();
 
@@ -120,6 +104,11 @@ export class NanoNetworkApi {
      * @returns {Promise<Map<string, number>>}
      */
     async connectPico(userFriendlyAddresses = []) {
+        if (this._consensus) {
+            // stay on the current consensus, no matter whether it's pico or nano
+            return this.getBalance(userFriendlyAddresses);
+        }
+
         return new Promise(async (resolve) => {
             await this._apiInitialized;
 
@@ -131,8 +120,9 @@ export class NanoNetworkApi {
             } catch (e) {}
 
             // Uses volatileNano to enable more than one parallel network iframe
-            const consensus = await Nimiq.Consensus.volatileNano();
-            const networkConfig = consensus.network.config;
+            this._consensus = await Nimiq.Consensus.volatileNano();
+            this._bindEvents();
+            const networkConfig = this._consensus.network.config;
 
             const picoHeads = [];
             let currentHead = null;
@@ -209,8 +199,10 @@ export class NanoNetworkApi {
                         receivedBalanceMsgCount += 1;
                         console.debug('[Pico] Received balance msg count:', receivedBalanceMsgCount);
                         if (receivedBalanceMsgCount >= 3) {
-                            resolve(picoBalances);
+                            console.debug('[Pico] Consensus established');
                             resolved = true;
+                            resolve(picoBalances);
+                            this.__consensusEstablished();
                         }
                     }
                 }
@@ -224,7 +216,8 @@ export class NanoNetworkApi {
 
                 connector.on('connection', (conn) => {
                     const channel = new Nimiq.PeerChannel(conn);
-                    const agent = new Nimiq.NetworkAgent(consensus.blockchain, consensus.network.addresses, networkConfig, channel);
+                    const agent = new Nimiq.NetworkAgent(this._consensus.blockchain, this._consensus.network.addresses,
+                        networkConfig, channel);
                     let header = null;
                     channel.on('head', (msg) => {
                         header = msg.header;
@@ -370,6 +363,25 @@ export class NanoNetworkApi {
         const tx = await this._createTransactionFromObject(txObj);
         this._consensus.mempool.removeTransaction(tx);
         return true;
+    }
+
+    _bindEvents() {
+        this._consensus.on('syncing', e => this._onConsensusSyncing());
+        this._consensus.on('established', e => this.__consensusEstablished());
+        this._consensus.on('lost', e => this._consensusLost());
+
+        this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
+
+        // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
+        // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
+        // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
+        // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
+
+        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
+        this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
+        this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
+        this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
+        this._consensus.network.on('peers-changed', () => this._onPeersChanged());
     }
 
     async _headChanged(header) {
