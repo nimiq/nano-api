@@ -25,9 +25,6 @@ export class NanoNetworkApi {
 
         this._balances = new Map();
 
-        /** @type {Nimiq.PeerChannel[]} */
-        this._picoChannels = [];
-
         /** @type {boolean} */
         this._shouldConnect = true;
     }
@@ -109,7 +106,14 @@ export class NanoNetworkApi {
             return this.getBalance(userFriendlyAddresses);
         }
 
-        return new Promise(async (resolve) => {
+        const picoHeads = [];
+        let currentHead = null;
+        /** @type {Nimiq.PeerChannel[]} */
+        const picoChannels = [];
+        /** @type {Map<string, number>} */
+        const picoBalances = new Map();
+
+        const balances = await new Promise(async (resolve) => {
             await this._apiInitialized;
 
             /** @type {Nimiq.Address[]} */
@@ -124,11 +128,6 @@ export class NanoNetworkApi {
             this._bindEvents();
             const networkConfig = this._consensus.network.config;
 
-            const picoHeads = [];
-            let currentHead = null;
-            /** @type {Map<string, number>} */
-            const picoBalances = new Map();
-
             let resolved = false;
             let usingFallback = false;
 
@@ -142,10 +141,10 @@ export class NanoNetworkApi {
             };
 
             const onChannelHead = (channel, header) => {
-                this._picoChannels.push(channel);
+                picoChannels.push(channel);
                 picoHeads.push(header);
 
-                if (this._picoChannels.length >= 3) {
+                if (picoChannels.length >= 3) {
                     let highest = {height: 0}; let lowest = {height: Number.MAX_SAFE_INTEGER};
                     for (const head of picoHeads) {
                         if (head.height > highest.height) highest = head;
@@ -169,7 +168,8 @@ export class NanoNetworkApi {
                 if (addresses.length === 0) return;
                 console.debug('[Pico] Getting balances');
 
-                for(const channel of this._picoChannels) {
+                // XXX might be enough to request the accounts proof from the channel that just announced its head?
+                for(const channel of picoChannels) {
                     channel.getAccountsProof(currentHead.hash(), addresses);
                 }
             };
@@ -205,7 +205,7 @@ export class NanoNetworkApi {
                         if (receivedBalanceMsgCount >= 3) {
                             console.debug('[Pico] Consensus established');
                             resolved = true;
-                            resolve(picoBalances);
+                            resolve(new Map(picoBalances)); // create a copy to be able to clear picoBalances map
                             this.__consensusEstablished();
                         }
                     }
@@ -213,7 +213,6 @@ export class NanoNetworkApi {
             };
 
             // TODO: Store randomly chosen seeds here to not connect twice to the same
-            const connectedSeeds = [];
 
             for (let i = 0; i < 4; i++) {
                 const connector = new Nimiq.WebSocketConnector(Nimiq.Protocol.WSS, 'wss', networkConfig);
@@ -222,21 +221,20 @@ export class NanoNetworkApi {
                     const channel = new Nimiq.PeerChannel(conn);
                     const agent = new Nimiq.NetworkAgent(this._consensus.blockchain, this._consensus.network.addresses,
                         networkConfig, channel);
-                    let header = null;
 
                     // Note that we stop the pico consensus checks once a consensus was reached (either by pico or nano
                     // fallback). However, during nano fallback, we keep them alive as we might still get to a pico
                     // consensus before the nano consensus.
                     channel.on('head', (msg) => {
                         if (resolved) return;
-                        header = msg.header;
+                        const header = msg.header;
                         console.debug(`[Pico] Current height is ${header.height}`);
                         onChannelHead(channel, header);
                     });
                     channel.on('accounts-proof', (msg) => {
                         if (resolved) return;
                         onBalancesMsg(msg);
-                    })
+                    });
                     agent.on('handshake', () => {
                         if (resolved) return;
                         channel.getHead();
@@ -252,6 +250,14 @@ export class NanoNetworkApi {
                 fallbackToNanoConsensus();
             }, 5000);
         });
+
+        picoHeads.splice(0, picoHeads.length);
+        currentHead = null;
+        picoChannels.splice(0, picoChannels.length);
+        picoBalances.clear();
+
+        for (const [address, balance] of balances) { this._balances.set(address, balance); }
+        return balances;
     }
 
      /**
