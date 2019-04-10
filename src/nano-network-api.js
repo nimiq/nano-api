@@ -173,6 +173,18 @@ export class NanoNetworkApi {
                 }
             };
 
+            const resolveConsensusEstablished = () => {
+                console.debug('[Pico] Consensus established');
+                cleanUpHandlers.forEach(cleanupHandler => cleanupHandler());
+                resolve(picoBalances);
+                this.__consensusEstablished();
+                if (!upgradeToNano) return;
+                // upgrade to normal nano connection to enable housekeeping in Network and to reconnect
+                // automatically in case of lost connection. Note that even if we don't upgrade it is still
+                // possible to reach nano consensus with the peers we connected to.
+                this.connect();
+            };
+
             const onChannelHead = (channel, header) => {
                 picoChannels.push(channel);
                 picoHeads.push(header);
@@ -187,7 +199,13 @@ export class NanoNetworkApi {
                         if (!currentHead) {
                             this._headChanged(lowest);
                             currentHead = lowest;
-                            getBalances();
+                            if (userFriendlyAddresses.length) {
+                                // consensus established if balances match
+                                getBalances();
+                            } else if (picoHeads.every(head => head.equals(currentHead))) {
+                                // consensus established if heads exactly match
+                                resolveConsensusEstablished();
+                            }
                         }
                     }
                     else {
@@ -235,17 +253,7 @@ export class NanoNetworkApi {
                         }
                         receivedBalanceMsgCount += 1;
                         console.debug('[Pico] Received balance msg count:', receivedBalanceMsgCount);
-                        if (receivedBalanceMsgCount >= 3) {
-                            console.debug('[Pico] Consensus established');
-                            cleanUpHandlers.forEach(cleanupHandler => cleanupHandler());
-                            resolve(picoBalances);
-                            this.__consensusEstablished();
-                            if (!upgradeToNano) return;
-                            // upgrade to normal nano connection to enable housekeeping in Network and to reconnect
-                            // automatically in case of lost connection. Note that even if we don't upgrade it is still
-                            // possible to reach nano consensus with the peers we connected to.
-                            this.connect();
-                        }
+                        if (receivedBalanceMsgCount >= 3) resolveConsensusEstablished();
                     }
                 }
             };
