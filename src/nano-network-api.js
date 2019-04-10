@@ -115,6 +115,7 @@ export class NanoNetworkApi {
         const picoChannels = [];
         /** @type {Map<string, number>} */
         const picoBalances = new Map();
+        const cleanUpHandlers = [];
 
         if (this._consensus) {
             if (this._consensus.established) {
@@ -149,17 +150,16 @@ export class NanoNetworkApi {
         const addresses = userFriendlyAddresses.map((address) => Nimiq.Address.fromUserFriendlyAddress(address));
 
         const balances = await new Promise(async (resolve, reject) => {
-            let resolved = false;
             let usingFallback = false;
 
             const fallbackToNanoConsensus = async () => {
-                if (resolved || usingFallback) return;
+                if (usingFallback) return;
                 usingFallback = true;
                 console.debug('[Pico] Using Nano fallback.');
                 try {
                     await this.connect();
                     const balances = await this.getBalance(userFriendlyAddresses);
-                    resolved = true;
+                    cleanUpHandlers.forEach(cleanUpHandler => cleanUpHandler());
                     resolve(balances);
                 } catch (e) {
                     reject(e);
@@ -230,8 +230,8 @@ export class NanoNetworkApi {
                         console.debug('[Pico] Received balance msg count:', receivedBalanceMsgCount);
                         if (receivedBalanceMsgCount >= 3) {
                             console.debug('[Pico] Consensus established');
-                            resolved = true;
-                            resolve(new Map(picoBalances)); // create a copy to be able to clear picoBalances map
+                            cleanUpHandlers.forEach(cleanupHandler => cleanupHandler());
+                            resolve(picoBalances);
                             this.__consensusEstablished();
                             // upgrade to normal nano consensus to enable housekeeping in Network and to reconnect
                             // automatically in case of lost connection
@@ -242,19 +242,21 @@ export class NanoNetworkApi {
             };
 
             function startPicoOnChannel(channel) {
-                // Note that we stop the pico consensus checks once a consensus was reached (either by pico or nano
+                // Note that we clean up the pico consensus checks once a consensus was reached (either by pico or nano
                 // fallback). However, during nano fallback, we keep them alive as we might still get to a pico
                 // consensus before the nano consensus.
-                channel.on('head', (msg) => {
-                    if (resolved) return;
+                const headListenerId = channel.on('head', (msg) => {
                     const header = msg.header;
                     console.debug(`[Pico] Current height is ${header.height}`);
                     onChannelHead(channel, header);
                 });
-                channel.on('accounts-proof', (msg) => {
-                    if (resolved) return;
-                    onBalancesMsg(msg);
+                const accountsProofListenerId = channel.on('accounts-proof', (msg) => onBalancesMsg(msg));
+
+                cleanUpHandlers.push(() => {
+                    channel.off('head', headListenerId);
+                    channel.off('accounts-proof', accountsProofListenerId);
                 });
+
                 channel.getHead();
             }
 
@@ -263,10 +265,11 @@ export class NanoNetworkApi {
             }
 
             if (establishedChannels.length < 4) {
-                network.on('peer-joined', (peer) => {
-                    if (resolved || Nimiq.Services.isNanoNode(peer.peerAddress.services)) return;
+                const peerJoinedListenerId = network.on('peer-joined', (peer) => {
+                    if (Nimiq.Services.isNanoNode(peer.peerAddress.services)) return;
                     startPicoOnChannel(peer.channel);
                 });
+                cleanUpHandlers.push(() => network.off('peer-joined', peerJoinedListenerId));
 
                 let additionalChannelsToConnectTo = 4 - establishedChannels.length;
                 for (const peerAddress of Nimiq.GenesisConfig.SEED_PEERS) {
@@ -276,17 +279,12 @@ export class NanoNetworkApi {
                 }
             }
 
-            setTimeout(() => {
-                if (resolved || usingFallback) return;
+            const fallbackTimeout = setTimeout(() => {
+                if (usingFallback) return;
                 fallbackToNanoConsensus();
             }, 5000);
+            cleanUpHandlers.push(() => clearTimeout(fallbackTimeout));
         });
-
-        establishedChannels.splice(0, establishedChannels.length);
-        picoHeads.splice(0, picoHeads.length);
-        currentHead = null;
-        picoChannels.splice(0, picoChannels.length);
-        picoBalances.clear();
 
         for (const [address, balance] of balances) { this._balances.set(address, balance); }
         return balances;
