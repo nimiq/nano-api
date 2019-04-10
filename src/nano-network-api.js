@@ -57,6 +57,12 @@ export class NanoNetworkApi {
         await this._consensusEstablished;
         const tx = await this._createTransactionFromObject(txObj);
         // console.log("Debug: transaction size was:", tx.serializedSize);
+
+        // wait until at least two non-nano agents told us that their subscriptions accept our transaction
+        await this._awaitCompatibleAgents(agents => agents.filter(agent =>
+            agent._remoteSubscription.matchesTransaction(tx)
+            && !Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)).length >= 2);
+
         this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
         this._consensus.relayTransaction(tx);
         return true;
@@ -100,10 +106,11 @@ export class NanoNetworkApi {
     }
 
     /**
-     * @param {string[]}
+     * @param {string[]} userFriendlyAddresses
+     * @param {boolean} [upgradeToNano]
      * @returns {Promise<Map<string, number>>}
      */
-    async connectPico(userFriendlyAddresses = []) {
+    async connectPico(userFriendlyAddresses = [], upgradeToNano = true) {
         this._shouldConnect = true;
         await this._apiInitialized;
         if (!this._shouldConnect) return new Map();
@@ -119,7 +126,7 @@ export class NanoNetworkApi {
 
         if (this._consensus) {
             if (this._consensus.established) {
-                // already consensus established
+                // already nano consensus established
                 const balances = await this.getBalance(userFriendlyAddresses);
                 for (const [address, balance] of balances) { this._balances.set(address, balance); }
                 return balances;
@@ -170,7 +177,7 @@ export class NanoNetworkApi {
                 picoChannels.push(channel);
                 picoHeads.push(header);
 
-                if (picoChannels.length >= 3) {
+                if (picoHeads.length >= 3) {
                     let highest = {height: 0}; let lowest = {height: Number.MAX_SAFE_INTEGER};
                     for (const head of picoHeads) {
                         if (head.height > highest.height) highest = head;
@@ -178,7 +185,7 @@ export class NanoNetworkApi {
                     }
                     if (highest.height - lowest.height <= 1) {
                         if (!currentHead) {
-                            this._onHeadChange(lowest);
+                            this._headChanged(lowest);
                             currentHead = lowest;
                             getBalances();
                         }
@@ -233,8 +240,10 @@ export class NanoNetworkApi {
                             cleanUpHandlers.forEach(cleanupHandler => cleanupHandler());
                             resolve(picoBalances);
                             this.__consensusEstablished();
-                            // upgrade to normal nano consensus to enable housekeeping in Network and to reconnect
-                            // automatically in case of lost connection
+                            if (!upgradeToNano) return;
+                            // upgrade to normal nano connection to enable housekeeping in Network and to reconnect
+                            // automatically in case of lost connection. Note that even if we don't upgrade it is still
+                            // possible to reach nano consensus with the peers we connected to.
                             this.connect();
                         }
                     }
@@ -378,6 +387,11 @@ export class NanoNetworkApi {
 
     async requestTransactionReceipts(address) {
         const addressBuffer = Nimiq.Address.fromUserFriendlyAddress(address);
+
+        // Need synced full node to tell us transaction receipts
+        await this._awaitCompatibleAgents(agents => agents.some(agent => agent.synced
+            && Nimiq.Services.isFullNode(agent.peer.peerAddress.services)));
+
         // @ts-ignore _requestTransactionReceipts is private currently
         return this._consensus._requestTransactionReceipts(addressBuffer);
     }
@@ -432,12 +446,31 @@ export class NanoNetworkApi {
     }
 
     async _headChanged(header) {
-        if (!this._consensus.established || (this._knownHead && this._knownHead.equals(header))) return;
-        const isConsensusHead = !this._knownHead;
+        await this._consensusEstablished;
+        if (this._knownHead && this._knownHead.equals(header)
+            || this._knownHead && this._knownHead.height > header.height) {
+            // Known or outdated head. Note that this currently doesn't handle rebranches well.
+            return;
+        }
+        const isFirstHead = !this._knownHead;
         this._knownHead = header;
         this._onHeadChange(header);
-        if (isConsensusHead) return; // no need to recheck balances when we just reached consensus
+        if (isFirstHead) return; // no need to recheck balances when we just reached consensus
         this._recheckBalances();
+    }
+
+    async _awaitCompatibleAgents(hasCompatibleAgents) {
+        return new Promise((resolve) => {
+            if (hasCompatibleAgents(this._consensus._agents.values())) {
+                resolve();
+                return;
+            }
+            const checkInterval = setInterval(() => {
+                if (!hasCompatibleAgents(this._consensus._agents.values())) return;
+                resolve();
+                clearInterval(checkInterval);
+            }, 300);
+        });
     }
 
     /**
@@ -445,16 +478,17 @@ export class NanoNetworkApi {
      */
     async _getAccounts(addresses, stackHeight) {
         if (addresses.length === 0) return [];
-        // checking for real (nano) consensus here instead of this._consensusEstablished as it doesn't work with pico
-        if (!this._consensus.established) {
-            let listenerId;
-            await new Promise(resolve => listenerId = this._consensus.on('established', resolve));
-            this._consensus.off('established', listenerId);
-        }
+        await this._consensusEstablished;
+
+        // This request can only succeed, if we have at least one agent that is synced. Pico consensus is not enough.
+        await this._awaitCompatibleAgents(agents => agents.some(agent => agent.synced
+            && this._knownHead && agent.knowsBlock(this._knownHead.hash())
+            && !Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)));
+
         let accounts;
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
         try {
-            accounts = await this._consensus.getAccounts(addressesAsAddresses);
+            accounts = await this._consensus.getAccounts(addressesAsAddresses, this._knownHead.hash());
         } catch (e) {
             stackHeight = stackHeight || 0;
             stackHeight++;
@@ -503,8 +537,12 @@ export class NanoNetworkApi {
      * @param {uint} [fromHeight]
      */
     async _requestTransactionHistory(address, knownReceipts = new Map(), fromHeight = 0) {
-        await this._consensusEstablished;
         address = Nimiq.Address.fromUserFriendlyAddress(address);
+
+        await this._consensusEstablished;
+        // need synced full nodes to tell us transaction history
+        await this._awaitCompatibleAgents(agents => agents.some(agent => agent.synced
+            && Nimiq.Services.isFullNode(agent.peer.peerAddress.services)));
 
         // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
 
@@ -621,7 +659,6 @@ export class NanoNetworkApi {
 
     __consensusEstablished() {
         this._consensusEstablishedResolver();
-        this._headChanged(this._consensus.blockchain.head.header);
         this._onConsensusEstablished();
     }
 
