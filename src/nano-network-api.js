@@ -25,11 +25,11 @@ export class NanoNetworkApi {
 
         this._balances = new Map();
 
-        /** @type {Nimiq.PeerChannel[]} */
-        this._picoChannels = [];
-
         /** @type {boolean} */
         this._shouldConnect = true;
+
+        /** @type {Nimiq.BlockHeader|null} */
+        this._knownHead = null;
     }
 
     get apiUrl() { return this._config.cdn }
@@ -57,6 +57,12 @@ export class NanoNetworkApi {
         await this._consensusEstablished;
         const tx = await this._createTransactionFromObject(txObj);
         // console.log("Debug: transaction size was:", tx.serializedSize);
+
+        // wait until at least two non-nano agents told us that their subscriptions accept our transaction
+        await this._awaitCompatibleAgents(agents => agents.filter(agent =>
+            agent._remoteSubscription.matchesTransaction(tx)
+            && !Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)).length >= 2);
+
         this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
         this._consensus.relayTransaction(tx);
         return true;
@@ -75,32 +81,18 @@ export class NanoNetworkApi {
     async connect() {
         this._shouldConnect = true;
         await this._apiInitialized;
-        if (!this._shouldConnect) return;
+        if (!this._shouldConnect || (this._consensus && this._consensus.network._autoConnect)) return;
 
         try {
             Nimiq.GenesisConfig[this._config.network]();
         } catch (e) {}
 
-        // Uses volatileNano to enable more than one parallel network iframe
-        this._consensus = await Nimiq.Consensus.volatileNano();
-        this._consensus.on('syncing', e => this._onConsensusSyncing());
-        this._consensus.on('established', e => this.__consensusEstablished());
-        this._consensus.on('lost', e => this._consensusLost());
-
-        this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
-
-        // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
-        // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
-        // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
-        // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
-
+        if (!this._consensus) {
+            // Uses volatileNano to enable more than one parallel network iframe
+            this._consensus = await Nimiq.Consensus.volatileNano();
+            this._bindEvents();
+        }
         this._consensus.network.connect();
-
-        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
-        this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
-        this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
-        this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
-        this._consensus.network.on('peers-changed', () => this._onPeersChanged());
 
         return true;
     }
@@ -114,42 +106,96 @@ export class NanoNetworkApi {
     }
 
     /**
-     * @param {string[]}
+     * @param {string[]} userFriendlyAddresses
+     * @param {boolean} [upgradeToNano]
      * @returns {Promise<Map<string, number>>}
      */
-    async connectPico(userFriendlyAddresses = []) {
-        return new Promise(async (resolve) => {
-            await this._apiInitialized;
+    async connectPico(userFriendlyAddresses = [], upgradeToNano = true) {
+        this._shouldConnect = true;
+        await this._apiInitialized;
+        if (!this._shouldConnect) return new Map();
 
-            /** @type {Nimiq.Address[]} */
-            const addresses = userFriendlyAddresses.map((address) => Nimiq.Address.fromUserFriendlyAddress(address));
+        const establishedChannels = [];
+        const picoHeads = [];
+        let currentHead = null;
+        /** @type {Nimiq.PeerChannel[]} */
+        const picoChannels = [];
+        /** @type {Map<string, number>} */
+        const picoBalances = new Map();
+        const cleanUpHandlers = [];
 
+        if (this._consensus) {
+            if (this._consensus.established) {
+                // already nano consensus established
+                const balances = await this.getBalance(userFriendlyAddresses);
+                for (const [address, balance] of balances) { this._balances.set(address, balance); }
+                if (upgradeToNano) {
+                    // Although we established a nano consensus it might be that it was only reached with our selected
+                    // pico peers. Therefore we upgrade to nano again. Note that if we are already on real nano, a
+                    // double invocation of connect doesn't do any harm.
+                    this.connect();
+                }
+                return balances;
+            } else {
+                // hook into the current sync process
+                for (const agent of this._consensus._agents.valueIterator()) {
+                    if (Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)) continue;
+                    // Note that for all agents known to the consensus a channel is currently established.
+                    // Agents with closed connections get automatically evicted.
+                    establishedChannels.push(agent.peer.channel);
+                    if (establishedChannels.length === 4) break;
+                }
+            }
+        } else {
             try {
                 Nimiq.GenesisConfig[this._config.network]();
             } catch (e) {}
 
             // Uses volatileNano to enable more than one parallel network iframe
-            const consensus = await Nimiq.Consensus.volatileNano();
-            const networkConfig = consensus.network.config;
+            this._consensus = await Nimiq.Consensus.volatileNano();
+            this._bindEvents();
+        }
 
-            const picoHeads = [];
-            let currentHead = null;
-            /** @type {Map<string, number>} */
-            const picoBalances = new Map();
-            let resolved = false;
+        const network = this._consensus.network;
+        const networkConfig = network.config;
+
+        /** @type {Nimiq.Address[]} */
+        const addresses = userFriendlyAddresses.map((address) => Nimiq.Address.fromUserFriendlyAddress(address));
+
+        const balances = await new Promise(async (resolve, reject) => {
+            let usingFallback = false;
 
             const fallbackToNanoConsensus = async () => {
-                this.connect()
-                const balances = await this.getBalance(userFriendlyAddresses);
-                resolve(balances);
-                resolved = true;
-            }
+                if (usingFallback) return;
+                usingFallback = true;
+                console.debug('[Pico] Using Nano fallback.');
+                try {
+                    await this.connect();
+                    const balances = await this.getBalance(userFriendlyAddresses);
+                    cleanUpHandlers.forEach(cleanUpHandler => cleanUpHandler());
+                    resolve(balances);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+
+            const resolveConsensusEstablished = () => {
+                console.debug('[Pico] Consensus established');
+                cleanUpHandlers.forEach(cleanupHandler => cleanupHandler());
+                resolve(picoBalances);
+                this.__consensusEstablished();
+                if (!upgradeToNano) return;
+                // upgrade to normal nano connection to enable housekeeping in Network and to reconnect
+                // automatically in case of lost connection. Note that even if we don't upgrade it is still
+                // possible to reach nano consensus with the peers we connected to.
+                this.connect();
+            };
 
             const onChannelHead = (channel, header) => {
-                this._picoChannels.push(channel);
+                picoChannels.push(channel);
                 picoHeads.push(header);
 
-                if (this._picoChannels.length >= 3) {
+                if (picoHeads.length >= 3) {
                     let highest = {height: 0}; let lowest = {height: Number.MAX_SAFE_INTEGER};
                     for (const head of picoHeads) {
                         if (head.height > highest.height) highest = head;
@@ -157,9 +203,15 @@ export class NanoNetworkApi {
                     }
                     if (highest.height - lowest.height <= 1) {
                         if (!currentHead) {
-                            this._onHeadChange(lowest);
+                            this._headChanged(lowest);
                             currentHead = lowest;
-                            getBalances();
+                            if (userFriendlyAddresses.length) {
+                                // consensus established if balances match
+                                getBalances();
+                            } else if (picoHeads.every(head => head.equals(currentHead))) {
+                                // consensus established if heads exactly match
+                                resolveConsensusEstablished();
+                            }
                         }
                     }
                     else {
@@ -173,7 +225,8 @@ export class NanoNetworkApi {
                 if (addresses.length === 0) return;
                 console.debug('[Pico] Getting balances');
 
-                for(const channel of this._picoChannels) {
+                // XXX might be enough to request the accounts proof from the channel that just announced its head?
+                for(const channel of picoChannels) {
                     channel.getAccountsProof(currentHead.hash(), addresses);
                 }
             };
@@ -206,46 +259,58 @@ export class NanoNetworkApi {
                         }
                         receivedBalanceMsgCount += 1;
                         console.debug('[Pico] Received balance msg count:', receivedBalanceMsgCount);
-                        if (receivedBalanceMsgCount >= 3) {
-                            resolve(picoBalances);
-                            resolved = true;
-                        }
+                        if (receivedBalanceMsgCount >= 3) resolveConsensusEstablished();
                     }
                 }
             };
 
-            // TODO: Store randomly chosen seeds here to not connect twice to the same
-            const connectedSeeds = [];
+            function startPicoOnChannel(channel) {
+                // Note that we clean up the pico consensus checks once a consensus was reached (either by pico or nano
+                // fallback). However, during nano fallback, we keep them alive as we might still get to a pico
+                // consensus before the nano consensus.
+                const headListenerId = channel.on('head', (msg) => {
+                    const header = msg.header;
+                    console.debug(`[Pico] Current height is ${header.height}`);
+                    onChannelHead(channel, header);
+                });
+                const accountsProofListenerId = channel.on('accounts-proof', (msg) => onBalancesMsg(msg));
 
-            for (let i = 0; i < 4; i++) {
-                const connector = new Nimiq.WebSocketConnector(Nimiq.Protocol.WSS, 'wss', networkConfig);
-
-                connector.on('connection', (conn) => {
-                    const channel = new Nimiq.PeerChannel(conn);
-                    const agent = new Nimiq.NetworkAgent(consensus.blockchain, consensus.network.addresses, networkConfig, channel);
-                    let header = null;
-                    channel.on('head', (msg) => {
-                        header = msg.header;
-                        console.debug(`[Pico] Current height is ${header.height}`);
-                        onChannelHead(channel, header);
-                    });
-                    channel.on('accounts-proof', (msg) => {
-                        onBalancesMsg(msg);
-                    })
-                    agent.on('handshake', () => {
-                        channel.getHead();
-                    });
+                cleanUpHandlers.push(() => {
+                    channel.off('head', headListenerId);
+                    channel.off('accounts-proof', accountsProofListenerId);
                 });
 
-                // Testnet only has 4 seeds
-                connector.connect(Nimiq.GenesisConfig.SEED_PEERS[i]);
+                channel.getHead();
             }
 
-            setTimeout(() => {
-                if (resolved) return;
+            for (const channel of establishedChannels) {
+                startPicoOnChannel(channel);
+            }
+
+            if (establishedChannels.length < 4) {
+                const peerJoinedListenerId = network.on('peer-joined', (peer) => {
+                    if (Nimiq.Services.isNanoNode(peer.peerAddress.services)) return;
+                    startPicoOnChannel(peer.channel);
+                });
+                cleanUpHandlers.push(() => network.off('peer-joined', peerJoinedListenerId));
+
+                let additionalChannelsToConnectTo = 4 - establishedChannels.length;
+                for (const peerAddress of Nimiq.GenesisConfig.SEED_PEERS) {
+                    if (additionalChannelsToConnectTo <= 0) break;
+                    if (!network.connections.connectOutbound(peerAddress)) continue; // continue on duplicate connection
+                    --additionalChannelsToConnectTo;
+                }
+            }
+
+            const fallbackTimeout = setTimeout(() => {
+                if (usingFallback) return;
                 fallbackToNanoConsensus();
             }, 5000);
+            cleanUpHandlers.push(() => clearTimeout(fallbackTimeout));
         });
+
+        for (const [address, balance] of balances) { this._balances.set(address, balance); }
+        return balances;
     }
 
      /**
@@ -336,6 +401,11 @@ export class NanoNetworkApi {
 
     async requestTransactionReceipts(address) {
         const addressBuffer = Nimiq.Address.fromUserFriendlyAddress(address);
+
+        // Need synced full node to tell us transaction receipts
+        await this._awaitCompatibleAgents(agents => agents.some(agent => agent.synced
+            && Nimiq.Services.isFullNode(agent.peer.peerAddress.services)));
+
         // @ts-ignore _requestTransactionReceipts is private currently
         return this._consensus._requestTransactionReceipts(addressBuffer);
     }
@@ -370,10 +440,51 @@ export class NanoNetworkApi {
         return true;
     }
 
+    _bindEvents() {
+        this._consensus.on('syncing', e => this._onConsensusSyncing());
+        this._consensus.on('established', e => this.__consensusEstablished());
+        this._consensus.on('lost', e => this._consensusLost());
+
+        this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
+
+        // this._consensus.on('sync-finished', e => console.log('consensus sync-finished'));
+        // this._consensus.on('sync-failed', e => console.log('consensus sync-failed'));
+        // this._consensus.on('sync-chain-proof', e => console.log('consensus sync-chain-proof'));
+        // this._consensus.on('verify-chain-proof', e => console.log('consensus verify-chain-proof'));
+
+        this._consensus.blockchain.on('head-changed', block => this._headChanged(block.header));
+        this._consensus.mempool.on('transaction-added', tx => this._transactionAdded(tx));
+        this._consensus.mempool.on('transaction-expired', tx => this._transactionExpired(tx));
+        this._consensus.mempool.on('transaction-mined', (tx, header) => this._transactionMined(tx, header));
+        this._consensus.network.on('peers-changed', () => this._onPeersChanged());
+    }
+
     async _headChanged(header) {
-        if (!this._consensus.established) return;
-        this._recheckBalances();
+        await this._consensusEstablished;
+        if (this._knownHead && this._knownHead.equals(header)
+            || this._knownHead && this._knownHead.height > header.height) {
+            // Known or outdated head. Note that this currently doesn't handle rebranches well.
+            return;
+        }
+        const isFirstHead = !this._knownHead;
+        this._knownHead = header;
         this._onHeadChange(header);
+        if (isFirstHead) return; // no need to recheck balances when we just reached consensus
+        this._recheckBalances();
+    }
+
+    async _awaitCompatibleAgents(hasCompatibleAgents) {
+        return new Promise((resolve) => {
+            if (hasCompatibleAgents(this._consensus._agents.values())) {
+                resolve();
+                return;
+            }
+            const checkInterval = setInterval(() => {
+                if (!hasCompatibleAgents(this._consensus._agents.values())) return;
+                resolve();
+                clearInterval(checkInterval);
+            }, 300);
+        });
     }
 
     /**
@@ -382,10 +493,16 @@ export class NanoNetworkApi {
     async _getAccounts(addresses, stackHeight) {
         if (addresses.length === 0) return [];
         await this._consensusEstablished;
+
+        // This request can only succeed, if we have at least one agent that is synced. Pico consensus is not enough.
+        await this._awaitCompatibleAgents(agents => agents.some(agent => agent.synced
+            && this._knownHead && agent.knowsBlock(this._knownHead.hash())
+            && !Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)));
+
         let accounts;
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
         try {
-            accounts = await this._consensus.getAccounts(addressesAsAddresses);
+            accounts = await this._consensus.getAccounts(addressesAsAddresses, this._knownHead.hash());
         } catch (e) {
             stackHeight = stackHeight || 0;
             stackHeight++;
@@ -434,8 +551,12 @@ export class NanoNetworkApi {
      * @param {uint} [fromHeight]
      */
     async _requestTransactionHistory(address, knownReceipts = new Map(), fromHeight = 0) {
-        await this._consensusEstablished;
         address = Nimiq.Address.fromUserFriendlyAddress(address);
+
+        await this._consensusEstablished;
+        // need synced full nodes to tell us transaction history
+        await this._awaitCompatibleAgents(agents => agents.some(agent => agent.synced
+            && Nimiq.Services.isFullNode(agent.peer.peerAddress.services)));
 
         // Inpired by Nimiq.BaseConsensus._requestTransactionHistory()
 
@@ -552,7 +673,6 @@ export class NanoNetworkApi {
 
     __consensusEstablished() {
         this._consensusEstablishedResolver();
-        this._headChanged(this._consensus.blockchain.head);
         this._onConsensusEstablished();
     }
 
