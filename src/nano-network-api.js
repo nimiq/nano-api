@@ -129,6 +129,12 @@ export class NanoNetworkApi {
                 // already nano consensus established
                 const balances = await this.getBalance(userFriendlyAddresses);
                 for (const [address, balance] of balances) { this._balances.set(address, balance); }
+                if (upgradeToNano) {
+                    // Although we established a nano consensus it might be that it was only reached with our selected
+                    // pico peers. Therefore we upgrade to nano again. Note that if we are already on real nano, a
+                    // double invocation of connect doesn't do any harm.
+                    this.connect();
+                }
                 return balances;
             } else {
                 // hook into the current sync process
