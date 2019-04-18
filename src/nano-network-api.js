@@ -139,7 +139,7 @@ export class NanoNetworkApi {
             } else {
                 // hook into the current sync process
                 for (const agent of this._consensus._agents.valueIterator()) {
-                    if (Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)) continue;
+                    if (!Nimiq.Services.isFullNode(agent.peer.peerAddress.services)) continue;
                     // Note that for all agents known to the consensus a channel is currently established.
                     // Agents with closed connections get automatically evicted.
                     establishedChannels.push(agent.peer.channel);
