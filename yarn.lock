@@ -2,9 +2,10 @@
 # yarn lockfile v1
 
 
-"@nimiq/utils@^0.0.2":
-  version "0.0.2"
-  resolved "https://registry.yarnpkg.com/@nimiq/utils/-/utils-0.0.2.tgz#190747f8ef9e6b4640e4ee3c5a9c0b089bf47049"
+"@nimiq/utils@^0.3.0":
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/@nimiq/utils/-/utils-0.3.1.tgz#f3bcd0800db207316cac754ff6548a1030290a5c"
+  integrity sha512-DONU//nAegIJHElIPpChbwzcUyA8piuGYeaGeQuGxdn8uCNzjGz8IZwGfnVYLwNONLswkYQQoRsxDsHypqdv3A==
 
 "@types/estree@0.0.39":
   version "0.0.39"
