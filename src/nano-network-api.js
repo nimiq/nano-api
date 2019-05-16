@@ -59,9 +59,9 @@ export class NanoNetworkApi {
         // console.log("Debug: transaction size was:", tx.serializedSize);
 
         // wait until at least two non-nano agents told us that their subscriptions accept our transaction
-        await this._awaitCompatibleAgents(agents => agents.filter(agent =>
+        await this._awaitCompatibleAgents(agents => agents.some(agent =>
             agent._remoteSubscription.matchesTransaction(tx)
-            && !Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)).length >= 2);
+            && !Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)));
 
         this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
         this._consensus.relayTransaction(tx);
@@ -436,7 +436,9 @@ export class NanoNetworkApi {
 
     async removeTxFromMempool(txObj) {
         const tx = await this._createTransactionFromObject(txObj);
-        this._consensus.mempool.removeTransaction(tx);
+        try {
+            this._consensus.mempool.removeTransaction(tx);
+        } catch (e) { console.warn(e); }
         return true;
     }
 
