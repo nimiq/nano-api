@@ -538,7 +538,10 @@ export class NanoNetworkApi {
 
         accounts.forEach((account, i) => {
             const address = addresses[i];
-            const balance = account ? Nimiq.Policy.satoshisToCoins(account.balance) : 0;
+            let balance = 0;
+            if (account) {
+                balance = Nimiq.Policy.satoshisToCoins(account.balance) - this._getPendingAmount(address);
+            }
             balances.set(address, balance);
         });
 
@@ -690,7 +693,9 @@ export class NanoNetworkApi {
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
         // Handle tx amount when the sender is own account
-        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
+        if (this._balances.has(senderAddr)) {
+            this._recheckBalances(senderAddr);
+        }
 
         this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, hash, tx.validityStartHeight);
     }
@@ -741,8 +746,6 @@ export class NanoNetworkApi {
         const balances = await this._getBalances(addresses);
 
         for (let [address, balance] of balances) {
-            balance -= this._getPendingAmount(address);
-
             if (this._balances.get(address) === balance) {
                 balances.delete(address);
                 continue;
