@@ -493,7 +493,7 @@ export class NanoNetworkApi {
      * @returns {Promise<Account[]>} An array element can be NULL if account does not exist
      */
     async _getAccounts(addresses, stackHeight) {
-        if (addresses.length === 0) return [];
+        if (addresses.length) return [];
         await this._consensusEstablished;
 
         // This request can only succeed, if we have at least one agent that is synced. Pico consensus is not enough.
