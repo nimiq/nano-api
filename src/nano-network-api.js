@@ -92,6 +92,9 @@ export class NanoNetworkApi {
             this._consensus = await Nimiq.Consensus.volatileNano();
             this._bindEvents();
         }
+        if (this._consensus.network._houseKeepingIntervalId) {
+            clearInterval(this._consensus.network._houseKeepingIntervalId)
+        }
         this._consensus.network.connect();
 
         return true;
@@ -485,7 +488,7 @@ export class NanoNetworkApi {
                 if (!hasCompatibleAgents(this._consensus._agents.values())) return;
                 resolve();
                 clearInterval(checkInterval);
-            }, 300);
+            }, 100);
         });
     }
 
@@ -499,6 +502,7 @@ export class NanoNetworkApi {
         // This request can only succeed, if we have at least one agent that is synced. Pico consensus is not enough.
         await this._awaitCompatibleAgents(agents => agents.some(agent => agent.synced
             && this._knownHead && agent.knowsBlock(this._knownHead.hash())
+            && this._consensus.blockchain.getBlock(this._knownHead.hash()) // stored in our blockchain for validation?
             && !Nimiq.Services.isNanoNode(agent.peer.peerAddress.services)));
 
         let accounts;
