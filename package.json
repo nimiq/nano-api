@@ -14,7 +14,7 @@
     "dist"
   ],
   "dependencies": {
-    "@nimiq/utils": "^0.3.0"
+    "@nimiq/utils": "^0.3.3"
   },
   "devDependencies": {
     "rollup": "^0.65.0"
