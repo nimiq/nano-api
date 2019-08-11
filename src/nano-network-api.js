@@ -530,7 +530,7 @@ export class NanoNetworkApi {
     async _subscribeAddresses(addresses) {
         const addressesAsAddresses = addresses.map(address => Nimiq.Address.fromUserFriendlyAddress(address));
         await this._consensusEstablished;
-        this._consensus.subscribeAccounts(addressesAsAddresses);
+        this._consensus.addSubscriptions(addressesAsAddresses);
     }
 
     /**
