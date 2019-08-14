@@ -19,6 +19,8 @@ export class NanoNetworkApi {
             this._onInitialized();
             resolve();
         });
+
+        this._isConsensusEstablished = false;
         this._createConsensusPromise();
 
         this._selfRelayedTransactionHashes = new Set();
@@ -187,6 +189,7 @@ export class NanoNetworkApi {
                 cleanUpHandlers.forEach(cleanupHandler => cleanupHandler());
                 resolve(picoBalances);
                 this.__consensusEstablished();
+                this._headChanged(picoHeads[picoHeads.length - 1]);
                 if (!upgradeToNano) return;
                 // upgrade to normal nano connection to enable housekeeping in Network and to reconnect
                 // automatically in case of lost connection. Note that even if we don't upgrade it is still
@@ -447,7 +450,10 @@ export class NanoNetworkApi {
 
     _bindEvents() {
         this._consensus.on('syncing', e => this._onConsensusSyncing());
-        this._consensus.on('established', e => this.__consensusEstablished());
+        this._consensus.on('established', e => {
+            this.__consensusEstablished();
+            this._headChanged(this._consensus.blockchain.head.header);
+        });
         this._consensus.on('lost', e => this._consensusLost());
 
         this._consensus.on('transaction-relayed', tx => this._transactionRelayed(tx));
@@ -465,7 +471,7 @@ export class NanoNetworkApi {
     }
 
     async _headChanged(header) {
-        await this._consensusEstablished;
+        if (!this._isConsensusEstablished) return;
         if (this._knownHead && this._knownHead.equals(header)
             || this._knownHead && this._knownHead.height > header.height) {
             // Known or outdated head. Note that this currently doesn't handle rebranches well.
@@ -681,11 +687,13 @@ export class NanoNetworkApi {
     }
 
     __consensusEstablished() {
+        this._isConsensusEstablished = true;
         this._consensusEstablishedResolver();
         this._onConsensusEstablished();
     }
 
     _consensusLost() {
+        this._isConsensusEstablished = false;
         this._createConsensusPromise();
         this._onConsensusLost();
     }
