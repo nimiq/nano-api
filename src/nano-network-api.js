@@ -114,6 +114,7 @@ export class NanoNetworkApi {
 
     // To support un-updated client code
     async connectPico(addresses) {
+        console.warn('connectPico() is deprecated. Use getBalance() instead.');
         return this.getBalance(addresses);
     }
 
@@ -128,25 +129,30 @@ export class NanoNetworkApi {
 
     /**
      * @param {string[]} addresses
-     * @param {Map} [knownReceipts] A map with the tx hash as key and the blockhash as value (both base64)
+     * @param {Map<string, string>} [knownReceipts] A map with the tx hash as key and the blockhash as value (both base64)
      * @param {uint} [fromHeight]
      */
     async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
         if (!(addresses instanceof Array)) addresses = [addresses];
         await this._consensusEstablished;
 
-        const receipts =
+        let receipts =
             // 1. Get all receipts for all addresses
             (await Promise.all(addresses.map(address => this._client.getTransactionReceiptsByAddress(address))))
             // 2. Flatten array
-            .reduce((flat, it) => flat.concat(it), [])
-            // 3. Remove duplicates
-            .filter((receipt, index, receipts) => receipts.indexOf(receipt) === index);
+            .reduce((flat, it) => flat.concat(it), []);
+
+        // 3. Remove duplicate receipts
+        const _txHashes = receipts.map(r => r.transactionHash.toString());
+        receipts = receipts.filter((r, index) => {
+            return _txHashes.indexOf(r.transactionHash.toString()) === index;
+        });
 
         const newReceipts = receipts
             // 4. Remove knownReceipts
             .filter(receipt => {
                 if (receipt.blockHeight < fromHeight) return false;
+                if (!knownReceipts) return true;
                 const txHash = receipt.transactionHash.toBase64();
                 if (knownReceipts.has(txHash)) {
                     // Check if block has changed
@@ -162,8 +168,7 @@ export class NanoNetworkApi {
         for (const receipt of newReceipts) {
             const entry = newBlocks.get(receipt.blockHash);
             if (entry) {
-                entry.push(receipt);
-                newBlocks.set(receipt.blockHash, entry);
+                newBlocks.set(receipt.blockHash, entry.concat(receipt));
             } else {
                 newBlocks.set(receipt.blockHash, [receipt]);
             }
@@ -187,7 +192,7 @@ export class NanoNetworkApi {
             // 9. Reverse array, so that oldest transactions are first
             .reverse()
             // 10. Flatten transactions
-            .reduce((flat, it) => flat.concat(it), [])
+            .reduce((flat, it) => flat.concat(it), []);
 
         // Then map to simple objects
         txs = txs.map(tx => ({
