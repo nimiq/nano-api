@@ -424,7 +424,9 @@ export class NanoNetworkApi {
         const addr = Nimiq.Address.fromUserFriendlyAddress(address);
         const txs = await (await this._client._consensus).getPendingTransactionsByAddress(addr);
         const pendingAmount = txs.reduce(
-            (acc, tx) => acc + (Nimiq.Policy.satoshisToCoins(tx.value + tx.fee) * (tx.sender.equals(addr) ? -1 : 1)),
+            // Only add the amount to the pending amount when the transaction is outgoing (-1),
+            // not when it's an incoming transaction (0).
+            (acc, tx) => acc + (Nimiq.Policy.satoshisToCoins(tx.value + tx.fee) * (tx.sender.equals(addr) ? -1 : 0)),
             0,
         );
         return pendingAmount;
