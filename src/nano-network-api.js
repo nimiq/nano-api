@@ -132,38 +132,36 @@ export class NanoNetworkApi {
      * @param {Map<string, string>} [knownReceipts] A map with the tx hash as key and the blockhash as value (both base64)
      * @param {uint} [fromHeight]
      */
-    async requestTransactionHistory(addresses, knownReceipts, fromHeight) {
+    async requestTransactionHistory(addresses, knownReceipts = new Map(), fromHeight = 0) {
         if (!(addresses instanceof Array)) addresses = [addresses];
         await this._consensusEstablished;
 
-        let receipts =
-            // 1. Get all receipts for all addresses
-            (await Promise.all(addresses.map(address => this._client.getTransactionReceiptsByAddress(address))))
-            // 2. Flatten array
-            .reduce((flat, it) => flat.concat(it), []);
+        const newReceiptsMap = new Map();
+        const knownReceiptHashes = new Set([...knownReceipts.entries()].map(entry => entry[0] + entry[1]));
 
-        // 3. Remove duplicate receipts
-        const _txHashes = receipts.map(r => r.transactionHash.toString());
-        receipts = receipts.filter((r, index) => {
-            return _txHashes.indexOf(r.transactionHash.toString()) === index;
-        });
+        // 1. Get all receipts for all addresses, flattened, only unknowns, unique
+        (await Promise.all(addresses.map(address => this._client.getTransactionReceiptsByAddress(address))))
+            .forEach(receiptsOfAddress => {
+                for (const receipt of receiptsOfAddress) {
+                    // Skip old receipts
+                    if (receipt.blockHeight < fromHeight) continue;
 
-        const newReceipts = receipts
-            // 4. Remove knownReceipts
-            .filter(receipt => {
-                if (receipt.blockHeight < fromHeight) return false;
-                if (!knownReceipts) return true;
-                const txHash = receipt.transactionHash.toBase64();
-                if (knownReceipts.has(txHash)) {
-                    // Check if block has changed
-                    return receipt.blockHash.toBase64() !== knownReceipts.get(txHash);
+                    const combinedHash = receipt.transactionHash.toBase64() + receipt.blockHash.toBase64();
+
+                    // Skip known receipts
+                    if (knownReceiptHashes.has(combinedHash)) continue;
+
+                    // Skip dublicate receipts
+                    if (newReceiptsMap.has(combinedHash)) continue;
+
+                    newReceiptsMap.set(combinedHash, receipt);
                 }
-                return true;
-            })
-            // 5. Sort in reverse, to resolve recent transactions first
-            .sort((a, b) => b.blockHeight - a.blockHeight);
+            });
 
-        // 6. Determine unique blocks that must be fetched (that contain unknown txs)
+        // 2. Sort in reverse, to resolve recent transactions first
+        const newReceipts = [...newReceiptsMap.values()].sort((a, b) => b.blockHeight - a.blockHeight);
+
+        // 3. Determine unique blocks that must be fetched (that contain unknown txs)
         const newBlocks = new Map();
         for (const receipt of newReceipts) {
             const entry = newBlocks.get(receipt.blockHash);
@@ -174,13 +172,13 @@ export class NanoNetworkApi {
             }
         }
 
-        // 7. Fetch all required blocks
+        // 4. Fetch all required blocks
         const blocks = new Map((await Promise.all([...newBlocks.keys()].map(
             async blockHash => [blockHash, await this._client.getBlock(blockHash, true)]
         ))));
 
         let txs =
-            // 8. Fetch required transactions from the blocks
+            // 5. Fetch required transactions from the blocks
             (await Promise.all([...newBlocks.entries()].map(async ([blockHash, receipts]) => {
                 const txHashes = receipts.map(receipt => receipt.transactionHash);
                 const block = blocks.get(blockHash);
@@ -189,12 +187,12 @@ export class NanoNetworkApi {
                 const txs = await consensus.getTransactionsFromBlock(txHashes, blockHash, block.height, block);
                 return txs.map(tx => ({ transaction: tx, header: block.header }));
             })))
-            // 9. Reverse array, so that oldest transactions are first
+            // 6. Reverse array, so that oldest transactions are first
             .reverse()
-            // 10. Flatten transactions
+            // 7. Flatten transactions
             .reduce((flat, it) => flat.concat(it), []);
 
-        // Then map to simple objects
+        // 8. Then map to simple objects
         txs = txs.map(tx => ({
             sender: tx.transaction.sender.toUserFriendlyAddress(),
             recipient: tx.transaction.recipient.toUserFriendlyAddress(),
