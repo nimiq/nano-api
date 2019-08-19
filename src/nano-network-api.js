@@ -422,14 +422,18 @@ export class NanoNetworkApi {
 
     async _getPendingAmount(address) {
         const addr = Nimiq.Address.fromUserFriendlyAddress(address);
-        const txs = await (await this._client._consensus).getPendingTransactionsByAddress(addr);
-        const pendingAmount = txs.reduce(
-            // Only add the amount to the pending amount when the transaction is outgoing (-1),
-            // not when it's an incoming transaction (0).
-            (acc, tx) => acc + (Nimiq.Policy.satoshisToCoins(tx.value + tx.fee) * (tx.sender.equals(addr) ? -1 : 0)),
-            0,
-        );
-        return pendingAmount;
+        try {
+            const txs = await (await this._client._consensus).getPendingTransactionsByAddress(addr);
+            const pendingAmount = txs.reduce(
+                // Only add the amount to the pending amount when the transaction is outgoing (-1),
+                // not when it's an incoming transaction (0).
+                (acc, tx) => acc + (Nimiq.Policy.satoshisToCoins(tx.value + tx.fee) * (tx.sender.equals(addr) ? -1 : 0)),
+                0,
+            );
+            return pendingAmount;
+        } catch (err) {
+            return 0;
+        }
     }
 
     async _createTransactionFromObject(txObj) {
