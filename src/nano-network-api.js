@@ -323,8 +323,13 @@ export class NanoNetworkApi {
     }
 
     _consensusLost() {
-        this._isConsensusEstablished = false;
-        this._createConsensusPromise();
+        if (this._isConsensusEstablished) {
+            // Only replace _consensusEstablished promise when it was resolved,
+            // as other methods are awaiting that promise and when it gets replaced,
+            // those methods hang forever.
+            this._createConsensusPromise();
+            this._isConsensusEstablished = false;
+        }
         this._onConsensusLost();
     }
 
