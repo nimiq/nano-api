@@ -166,7 +166,8 @@ export class NanoNetworkApi {
         for (const receipt of newReceipts) {
             const entry = newBlocks.get(receipt.blockHash);
             if (entry) {
-                newBlocks.set(receipt.blockHash, entry.concat(receipt));
+                // The entry is updated in the map by reference.
+                entry.push(receipt);
             } else {
                 newBlocks.set(receipt.blockHash, [receipt]);
             }
