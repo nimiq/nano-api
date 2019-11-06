@@ -53,12 +53,35 @@ export class NanoNetworkApi {
      * @returns {Promise<Nimiq.Client.TransactionDetails>}
      */
     async relayTransaction(txObj) {
+        let isTxSent = false;
+        let mustWaitBeforeRelay = !this._isConsensusEstablished;
+
         await this._consensusEstablished;
+
         const tx = await this._createTransactionFromObject(txObj);
         // console.log("Debug: transaction size was:", tx.serializedSize);
-
         this._selfRelayedTransactionHashes.add(tx.hash().toBase64());
-        return this._client.sendTransaction(tx);
+
+        let txDetails;
+        let attempts = 0;
+        while (!isTxSent) {
+            // Wait 1s before sending the transaction so that peers can announce their mempool service to us
+            if (mustWaitBeforeRelay) await new Promise(res => setTimeout(res, 1000));
+
+            txDetails = await this._client.sendTransaction(tx);
+
+            if (txDetails.state === Nimiq.Client.TransactionState.INVALIDATED) {
+                throw new Error('Transaction is invalid');
+            }
+
+            isTxSent = txDetails.state === Nimiq.Client.TransactionState.PENDING ||
+                       txDetails.start === Nimiq.Client.TransactionState.MINED;
+
+            mustWaitBeforeRelay = true;
+            if (++attempts === 3) break;
+        }
+
+        return txDetails;
     }
 
     /**
