@@ -282,7 +282,6 @@ export class NanoNetworkApi {
                     this._onConsensusSyncing(); break;
                 case Nimiq.Client.ConsensusState.ESTABLISHED:
                     this.__consensusEstablished(); break;
-                    this._headChanged();
             }
         });
 
