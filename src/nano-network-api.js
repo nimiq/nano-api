@@ -333,7 +333,7 @@ export class NanoNetworkApi {
             const address = addresses[i];
             let balance = 0;
             if (account) {
-                balance = Nimiq.Policy.satoshisToCoins(account.balance) + (await this._getPendingAmount(address));
+                balance = Math.max(0, Nimiq.Policy.satoshisToCoins(account.balance) + (await this._getPendingAmount(address)));
             }
             balances.set(address, balance);
         }));
