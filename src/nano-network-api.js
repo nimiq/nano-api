@@ -304,7 +304,9 @@ export class NanoNetworkApi {
         const isFirstHead = !this._knownHead;
         this._knownHead = header;
         this._onHeadChange(header);
-        if (isFirstHead) return; // no need to recheck balances when we just reached consensus
+        // no need to recheck balances when we just reached consensus
+        // because subscribe() already queued it
+        if (isFirstHead) return;
         this._recheckBalances();
     }
 
@@ -437,11 +439,13 @@ export class NanoNetworkApi {
 
         for (let [address, balance] of balances) {
             if (this._balances.get(address) === balance) {
+                // Balance did not change since last check.
+                // Remove from balances Map to not send this balance in the balances-changed event.
                 balances.delete(address);
                 continue;
             }
 
-            balances.set(address, balance);
+            // Update balances cache
             this._balances.set(address, balance);
         }
 
