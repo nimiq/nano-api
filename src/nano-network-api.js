@@ -81,7 +81,7 @@ export class NanoNetworkApi {
             if (++attempts === 3) break;
         }
 
-        return txDetails;
+        return txDetails.toPlain();
     }
 
     /**
