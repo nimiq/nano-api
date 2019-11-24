@@ -118,7 +118,7 @@ export class NanoNetworkApi {
         if (!(addresses instanceof Array)) addresses = [addresses];
         await this._apiInitialized;
         this._client.addTransactionListener(this._onTransaction.bind(this), addresses);
-        this._recheckBalances(addresses);
+        this._recheckBalances(addresses, true);
         return true;
     }
 
@@ -431,14 +431,18 @@ export class NanoNetworkApi {
         return Math.round(difficulty * Math.pow(2, 16) / Nimiq.Policy.BLOCK_TIME);
     }
 
-    async _recheckBalances(addresses) {
+    /**
+     * @param {string|string[]} [addresses]
+     * @param {boolean} [emitAllBalances]
+     */
+    async _recheckBalances(addresses, emitAllBalances) {
         if (!addresses) addresses = [...this._balances.keys()];
         if (!(addresses instanceof Array)) addresses = [addresses];
 
         const balances = await this._getBalances(addresses);
 
         for (let [address, balance] of balances) {
-            if (this._balances.get(address) === balance) {
+            if (!emitAllBalances && this._balances.get(address) === balance) {
                 // Balance did not change since last check.
                 // Remove from balances Map to not send this balance in the balances-changed event.
                 balances.delete(address);
