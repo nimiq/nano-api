@@ -162,10 +162,15 @@ export class NanoNetworkApi {
         const newReceiptsMap = new Map();
         const knownReceiptHashes = new Set([...knownReceipts.entries()].map(entry => entry[0] + entry[1]));
 
+        let wasRateLimited = false;
+
         // 1. Get all receipts for all addresses, flattened, only unknowns, unique
         (await Promise.all(addresses.map(address => this._client
             .getTransactionReceiptsByAddress(address)
-            .catch(() => [])
+            .catch(() => {
+                wasRateLimited = true;
+                return [];
+            })
         )))
             .forEach(receiptsOfAddress => {
                 for (const receipt of receiptsOfAddress) {
@@ -204,7 +209,10 @@ export class NanoNetworkApi {
         /** @type {Map<string, Promise<Nimiq.Block | null>>} */
         const blocks = new Map([...newBlocks.keys()].map(blockHash => [blockHash, this._client
             .getBlock(blockHash, true)
-            .catch(() => null),
+            .catch(() => {
+                wasRateLimited = true;
+                return null;
+            }),
         ]));
 
         let txs =
@@ -218,7 +226,10 @@ export class NanoNetworkApi {
                 const consensus = await this._client._consensus;
                 const txs = await consensus
                     .getTransactionsFromBlock(txHashes, blockHash, block.height, block)
-                    .catch(() => []);
+                    .catch(() => {
+                        wasRateLimited = true;
+                        return [];
+                    });
                 return txs.map(tx => ({ transaction: tx, header: block.header }));
             })))
             // 6. Reverse array, so that oldest transactions are first
@@ -243,6 +254,7 @@ export class NanoNetworkApi {
         return {
             newTransactions: txs,
             // removedTransactions: removedTxs,
+            wasRateLimited,
         };
     }
 
