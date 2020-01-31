@@ -1,4 +1,4 @@
-import {Utf8Tools} from '@nimiq/utils';
+import { Utf8Tools } from '@nimiq/utils';
 
 export class NanoNetworkApi {
 
@@ -12,11 +12,13 @@ export class NanoNetworkApi {
             try {
                 await Nimiq.load();
             } catch (e) {
-                this._onInitializationError(e.message || e);
+                console.error('Nimiq API could not be initialized:', e.message || e);
+                this.fire('nimiq-api-fail', e.message || e);
                 return; // Do not resolve promise
             }
             // setTimeout(resolve, 500);
-            this._onInitialized();
+            // console.log('Nimiq API ready to use');
+            this.fire('nimiq-api-ready');
             resolve();
         });
 
@@ -299,11 +301,26 @@ export class NanoNetworkApi {
         this._client.addConsensusChangedListener(state => {
             switch (state) {
                 case Nimiq.Client.ConsensusState.CONNECTING:
-                    this._consensusLost(); break;
+                    if (this._isConsensusEstablished) {
+                        // Only replace _consensusEstablished promise when it was resolved,
+                        // as other methods are awaiting that promise and when it gets replaced,
+                        // those methods hang forever.
+                        this._createConsensusPromise();
+                        this._isConsensusEstablished = false;
+                    }
+                    console.log('consensus lost');
+                    this.fire('nimiq-consensus-lost');
+                    break;
                 case Nimiq.Client.ConsensusState.SYNCING:
-                    this._onConsensusSyncing(); break;
+                    console.log('consensus syncing');
+                    this.fire('nimiq-consensus-syncing');
+                    break;
                 case Nimiq.Client.ConsensusState.ESTABLISHED:
-                    this.__consensusEstablished(); break;
+                    this._isConsensusEstablished = true;
+                    this._consensusEstablishedResolver();
+                    console.log('Consensus established');
+                    this.fire('nimiq-consensus-established');
+                    break;
             }
         });
 
@@ -325,7 +342,11 @@ export class NanoNetworkApi {
         }
         const isFirstHead = !this._knownHead;
         this._knownHead = header;
-        this._onHeadChange(header);
+        // console.log('height changed:', header.height);
+        this.fire('nimiq-head-change', {
+            height: header.height,
+            globalHashrate: this._globalHashrate(header.difficulty)
+        });
         // no need to recheck balances when we just reached consensus
         // because subscribe() already queued it
         if (isFirstHead) return;
@@ -363,23 +384,6 @@ export class NanoNetworkApi {
         return balances;
     }
 
-    __consensusEstablished() {
-        this._isConsensusEstablished = true;
-        this._consensusEstablishedResolver();
-        this._onConsensusEstablished();
-    }
-
-    _consensusLost() {
-        if (this._isConsensusEstablished) {
-            // Only replace _consensusEstablished promise when it was resolved,
-            // as other methods are awaiting that promise and when it gets replaced,
-            // those methods hang forever.
-            this._createConsensusPromise();
-            this._isConsensusEstablished = false;
-        }
-        this._onConsensusLost();
-    }
-
     _onTransaction(txDetails) {
         switch (txDetails.state) {
             case Nimiq.Client.TransactionState.NEW:
@@ -411,7 +415,15 @@ export class NanoNetworkApi {
             this._recheckBalances(senderAddr);
         }
 
-        this._onTransactionPending(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, hash, tx.validityStartHeight);
+        this.fire('nimiq-transaction-pending', {
+            sender: senderAddr,
+            recipient: recipientAddr,
+            value: Nimiq.Policy.satoshisToCoins(tx.value),
+            fee: Nimiq.Policy.satoshisToCoins(tx.fee),
+            extraData: tx.data,
+            hash,
+            validityStartHeight: tx.validityStartHeight,
+        });
     }
 
     _transactionExpired(tx) {
@@ -420,7 +432,8 @@ export class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionExpired(tx.hash().toBase64());
+        // console.log('expired:', hash);
+        this.fire('nimiq-transaction-expired', tx.hash().toBase64());
     }
 
     _transactionMined(tx, header) {
@@ -430,7 +443,17 @@ export class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionMined(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, tx.hash().toBase64(), header.height, header.timestamp, tx.validityStartHeight);
+        this.fire('nimiq-transaction-mined', {
+            sender: senderAddr,
+            recipient: recipientAddr,
+            value: Nimiq.Policy.satoshisToCoins(tx.value),
+            fee: Nimiq.Policy.satoshisToCoins(tx.fee),
+            extraData: tx.data,
+            hash: tx.hash().toBase64(),
+            blockHeight: header.height,
+            timestamp: header.timestamp,
+            validityStartHeight: tx.validityStartHeight,
+        });
     }
 
     _transactionRelayed(tx) {
@@ -440,7 +463,15 @@ export class NanoNetworkApi {
         // Handle tx amount when the sender is own account
         this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
 
-        this._onTransactionRelayed(senderAddr, recipientAddr, Nimiq.Policy.satoshisToCoins(tx.value), Nimiq.Policy.satoshisToCoins(tx.fee), tx.data, tx.hash().toBase64(), tx.validityStartHeight);
+        this.fire('nimiq-transaction-relayed', {
+            sender: senderAddr,
+            recipient: recipientAddr,
+            value: Nimiq.Policy.satoshisToCoins(tx.value),
+            fee: Nimiq.Policy.satoshisToCoins(tx.fee),
+            extraData: tx.data,
+            hash: tx.hash().toBase64(),
+            validityStartHeight: tx.validityStartHeight,
+        });
     }
 
     _createConsensusPromise() {
@@ -471,7 +502,10 @@ export class NanoNetworkApi {
             this._balances.set(address, balance);
         }
 
-        if (balances.size) this._onBalancesChanged(balances);
+        if (balances.size) {
+            // console.log('new balances:', balances);
+            this.fire('nimiq-balances', balances);
+        }
     }
 
     async _getPendingAmount(address) {
@@ -546,64 +580,6 @@ export class NanoNetworkApi {
             data,
             proof.serialize(),
         );
-    }
-
-    _onInitialized() {
-        // console.log('Nimiq API ready to use');
-        this.fire('nimiq-api-ready');
-    }
-
-    _onConsensusSyncing() {
-        console.log('consensus syncing');
-        this.fire('nimiq-consensus-syncing');
-    }
-
-    _onConsensusEstablished() {
-        console.log('consensus established');
-        this.fire('nimiq-consensus-established');
-    }
-
-    _onConsensusLost() {
-        console.log('consensus lost');
-        this.fire('nimiq-consensus-lost');
-    }
-
-    _onBalancesChanged(balances) {
-        // console.log('new balances:', balances);
-        this.fire('nimiq-balances', balances);
-    }
-
-    _onTransactionPending(sender, recipient, value, fee, extraData, hash, validityStartHeight) {
-        // console.log('pending:', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
-        this.fire('nimiq-transaction-pending', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
-    }
-
-    _onTransactionExpired(hash) {
-        // console.log('expired:', hash);
-        this.fire('nimiq-transaction-expired', hash);
-    }
-
-    _onTransactionMined(sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight) {
-        // console.log('mined:', { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
-        this.fire('nimiq-transaction-mined', { sender, recipient, value, fee, extraData, hash, blockHeight, timestamp, validityStartHeight });
-    }
-
-    _onTransactionRelayed(sender, recipient, value, fee, extraData, hash, validityStartHeight) {
-        console.log('relayed:', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
-        this.fire('nimiq-transaction-relayed', { sender, recipient, value, fee, extraData, hash, validityStartHeight });
-    }
-
-    _onInitializationError(e) {
-        console.error('Nimiq API could not be initialized:', e);
-        this.fire('nimiq-api-fail', e);
-    }
-
-    _onHeadChange(header) {
-        // console.log('height changed:', header.height);
-        this.fire('nimiq-head-change', {
-            height: header.height,
-            globalHashrate: this._globalHashrate(header.difficulty)
-        });
     }
 
     async _onPeersChanged() {
