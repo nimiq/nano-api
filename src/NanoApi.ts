@@ -44,6 +44,7 @@ type VestingContractOut = {
 };
 
 type PlainTransaction = ReturnType<Nimiq.Transaction["toPlain"]>;
+type PlainTransactionReceipt = ReturnType<Nimiq.TransactionReceipt["toPlain"]>;
 type PlainTransactionDetails = ReturnType<Nimiq.Client.TransactionDetails["toPlain"]>;
 type PlainVestingContract = ReturnType<Nimiq.VestingContract["toPlain"]>;
 
@@ -56,7 +57,8 @@ export class NanoApi {
     private _consensusEstablishedResolver!: () => any;
     private _isConsensusEstablished = false;
     private _selfRelayedTransactionHashes = new Set<string>();
-    private _balances: Balances = new Map<string, number>();
+    private _balances: Balances = new Map<string, number>(); // Balances in Luna, excluding pending txs
+    private _compatBalances: Balances = new Map<string, number>(); // Balances in NIM, including pending txs
     private _knownHead: Nimiq.BlockHeader | null = null;
     private _client!: Nimiq.Client;
 
@@ -153,8 +155,8 @@ export class NanoApi {
     async getBalance(addresses: string | string[]): Promise<Balances> {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
-        const balances = await this._getBalances(addresses);
-        for (const [address, balance] of balances) { this._balances.set(address, balance); }
+        const balances = (await this._getBalances(addresses)).compat;
+        for (const [address, balance] of balances) { this._compatBalances.set(address, balance); }
 
         return balances;
     }
@@ -277,14 +279,17 @@ export class NanoApi {
         };
     }
 
-    async requestTransactionReceipts(address: string, limit?: number): Promise<Nimiq.TransactionReceipt[]> {
+    async requestTransactionReceipts(address: string, limit?: number): Promise<PlainTransactionReceipt[]> {
         await this._consensusEstablished;
-        return this._client.getTransactionReceiptsByAddress(address, limit);
+        const receipts = await this._client.getTransactionReceiptsByAddress(address, limit);
+        return receipts.map(r => r.toPlain());
     }
 
-    async getGenesisVestingContracts(): Promise<VestingContractOut[]> {
+    async getGenesisVestingContracts(): Promise<VestingContractOut[]>
+    async getGenesisVestingContracts(modern: true): Promise<PlainVestingContract[]> // MODERN
+    async getGenesisVestingContracts(modern?: boolean): Promise<(VestingContractOut|PlainVestingContract)[]> {
         await this._apiInitialized;
-        const contracts: VestingContractOut[] = [];
+        const contracts: (VestingContractOut|PlainVestingContract)[] = [];
         const buf = Nimiq.BufferUtils.fromBase64(Nimiq.GenesisConfig.GENESIS_ACCOUNTS);
         const count = buf.readUint16();
         for (let i = 0; i < count; i++) {
@@ -293,7 +298,7 @@ export class NanoApi {
 
             if (account.type === Nimiq.Account.Type.VESTING) {
                 const contract = account as Nimiq.VestingContract;
-                contracts.push({
+                contracts.push(modern ? contract.toPlain() : {
                     address: address.toUserFriendlyAddress(),
                     // balance: Nimiq.Policy.satoshisToCoins(account.balance),
                     owner: contract.owner.toUserFriendlyAddress(),
@@ -318,6 +323,8 @@ export class NanoApi {
 
     async _bindEventListeners(): Promise<void> {
         this._client.addConsensusChangedListener(state => {
+            this.fire('consensus', state); // MODERN
+
             switch (state) {
                 case Nimiq.Client.ConsensusState.CONNECTING:
                     if (this._isConsensusEstablished) {
@@ -363,6 +370,9 @@ export class NanoApi {
         }
         const isFirstHead = !this._knownHead;
         this._knownHead = header;
+
+        this.fire('head-height', header.height); // MODERN
+
         // console.log('height changed:', header.height);
         this.fire('nimiq-head-change', {
             height: header.height,
@@ -382,24 +392,35 @@ export class NanoApi {
         return this._client.getAccounts(addresses);
     }
 
-    async _getBalances(addresses: string[]): Promise<Balances> {
+    async _getBalances(addresses: string[]): Promise<{
+        balances: Balances,
+        compat: Balances,
+    }> {
         let accounts = await this._getAccounts(addresses);
 
         const balances: Balances = new Map();
+        const compatBalances: Balances = new Map();
 
         await Promise.all(accounts.map(async (account, i) => {
             const address = addresses[i];
-            let balance = 0;
+            balances.set(address, account.balance);
+
+            let compatBalance = 0;
             if (account) {
-                balance = Math.max(0, Nimiq.Policy.satoshisToCoins(account.balance) + (await this._getPendingAmount(address)));
+                compatBalance = Math.max(0, Nimiq.Policy.satoshisToCoins(account.balance) + (await this._getPendingAmount(address)));
             }
-            balances.set(address, balance);
+            compatBalances.set(address, compatBalance);
         }));
 
-        return balances;
+        return {
+            balances,
+            compat: compatBalances,
+        };
     }
 
     _onTransaction(txDetails: Nimiq.Client.TransactionDetails): void {
+        this.fire('transaction', txDetails.toPlain()); // MODERN
+
         switch (txDetails.state) {
             case Nimiq.Client.TransactionState.NEW:
             case Nimiq.Client.TransactionState.PENDING:
@@ -426,7 +447,7 @@ export class NanoApi {
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
         // Handle tx amount when the sender is own account
-        if (this._balances.has(senderAddr)) {
+        if (this._compatBalances.has(senderAddr)) {
             this._recheckBalances(senderAddr);
         }
 
@@ -445,7 +466,7 @@ export class NanoApi {
         const senderAddr = tx.sender.toUserFriendlyAddress();
 
         // Handle tx amount when the sender is own account
-        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
+        this._compatBalances.has(senderAddr) && this._recheckBalances(senderAddr);
 
         // console.log('expired:', hash);
         this.fire('nimiq-transaction-expired', tx.hash().toBase64());
@@ -456,7 +477,7 @@ export class NanoApi {
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
         // Handle tx amount when the sender is own account
-        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
+        this._compatBalances.has(senderAddr) && this._recheckBalances(senderAddr);
 
         this.fire('nimiq-transaction-mined', {
             sender: senderAddr,
@@ -476,7 +497,7 @@ export class NanoApi {
         const recipientAddr = tx.recipient.toUserFriendlyAddress();
 
         // Handle tx amount when the sender is own account
-        this._balances.has(senderAddr) && this._recheckBalances(senderAddr);
+        this._compatBalances.has(senderAddr) && this._recheckBalances(senderAddr);
 
         this.fire('nimiq-transaction-relayed', {
             sender: senderAddr,
@@ -503,7 +524,7 @@ export class NanoApi {
         if (!addresses) addresses = [...this._balances.keys()];
         if (!(addresses instanceof Array)) addresses = [addresses];
 
-        const balances = await this._getBalances(addresses);
+        const { balances, compat: compatBalances } = await this._getBalances(addresses);
 
         for (let [address, balance] of balances) {
             if (this._balances.get(address) === balance) {
@@ -519,7 +540,24 @@ export class NanoApi {
 
         if (balances.size) {
             // console.log('new balances:', balances);
-            this.fire('nimiq-balances', balances);
+            this.fire('balances', balances); // MODERN
+        }
+
+        for (let [address, compatBalance] of compatBalances) {
+            if (this._compatBalances.get(address) === compatBalance) {
+                // Balance did not change since last check.
+                // Remove from balances Map to not send this balance in the balances-changed event.
+                compatBalances.delete(address);
+                continue;
+            }
+
+            // Update balances cache
+            this._compatBalances.set(address, compatBalance);
+        }
+
+        if (compatBalances.size) {
+            // console.log('new balances:', balances);
+            this.fire('nimiq-balances', compatBalances);
         }
     }
 
@@ -606,6 +644,7 @@ export class NanoApi {
         const statistics = await this._client.network.getStatistics();
         const peerCount = statistics.totalPeerCount;
         // console.log('peers changed:', peerCount);
+        this.fire('peer-count', peerCount); // MODERN
         this.fire('nimiq-peer-count', peerCount);
     }
 
@@ -618,5 +657,26 @@ export class NanoApi {
             script.addEventListener('error', () => reject(script), false);
             document.body.appendChild(script);
         });
+    }
+
+    /**
+     * N E W   A P I
+     */
+
+    async sendTransaction(tx: PlainTransaction): Promise<PlainTransactionDetails> {
+        await this._consensusEstablished;
+        const txDetail = await this._client.sendTransaction(tx);
+        return txDetail.toPlain();
+    }
+
+    async getTransactionsByAddress(
+        address: string,
+        sinceHeight?: number,
+        knownDetails?: PlainTransactionDetails[],
+        limit?: number
+    ): Promise<PlainTransactionDetails[]> {
+        await this._consensusEstablished;
+        const txDetails = await this._client.getTransactionsByAddress(address, sinceHeight, knownDetails, limit);
+        return txDetails.map(txd => txd.toPlain());
     }
 }
