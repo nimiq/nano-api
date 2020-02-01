@@ -1,34 +1,19 @@
 // rollup.config.js
-const dependencies = Object.keys(require('./package.json').dependencies);
+import { dependencies } from './package.json';
+import typescript from 'rollup-plugin-typescript2';
 
 export default [
     {
-        input: 'src/nano-network-api.js',
+        input: 'src/NanoApi.ts',
+        plugins: [
+            typescript({
+                useTsconfigDeclarationDir: true,
+            }),
+        ],
         output: {
-            file: 'dist/nano-network-api.common.js',
-            format: 'cjs'
-        },
-        external: dependencies
-    },
-    {
-        input: 'src/nano-network-api.js',
-        output: {
-            file: 'dist/nano-network-api.umd.js',
-            format: 'umd',
-            name: 'window',
-            extend: true,
-            globals: {
-                '@nimiq/utils': 'window'
-            }
-        },
-        external: dependencies
-    },
-    {
-        input: 'src/nano-network-api.js',
-        output: {
-            file: 'dist/nano-network-api.es.js',
+            file: 'dist/NanoApi.es.js',
             format: 'es'
         },
-        external: dependencies
+        external: Object.keys(dependencies)
     }
 ];
