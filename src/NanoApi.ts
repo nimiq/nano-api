@@ -46,7 +46,9 @@ type VestingContractOut = {
 type PlainTransaction = ReturnType<Nimiq.Transaction["toPlain"]>;
 type PlainTransactionReceipt = ReturnType<Nimiq.TransactionReceipt["toPlain"]>;
 type PlainTransactionDetails = ReturnType<Nimiq.Client.TransactionDetails["toPlain"]>;
-type PlainVestingContract = ReturnType<Nimiq.VestingContract["toPlain"]>;
+type PlainVestingContract = ReturnType<Nimiq.VestingContract["toPlain"]> & {
+    address: string,
+};
 
 type Balances = Map<string, number>;
 
@@ -298,7 +300,10 @@ export class NanoApi {
 
             if (account.type === Nimiq.Account.Type.VESTING) {
                 const contract = account as Nimiq.VestingContract;
-                contracts.push(modern ? contract.toPlain() : {
+                contracts.push(modern ? {
+                    address: address.toUserFriendlyAddress(),
+                    ...contract.toPlain(),
+                 } : {
                     address: address.toUserFriendlyAddress(),
                     // balance: Nimiq.Policy.satoshisToCoins(account.balance),
                     owner: contract.owner.toUserFriendlyAddress(),
