@@ -15,7 +15,7 @@
   ],
   "types": "types/index.d.ts",
   "dependencies": {
-    "@nimiq/core-web": "^1.5.4",
+    "@nimiq/core-web": "^1.5.5",
     "@nimiq/utils": "^0.3.3"
   },
   "devDependencies": {

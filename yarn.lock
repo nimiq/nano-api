@@ -2,10 +2,10 @@
 # yarn lockfile v1
 
 
-"@nimiq/core-web@^1.5.4":
-  version "1.5.4"
-  resolved "https://registry.yarnpkg.com/@nimiq/core-web/-/core-web-1.5.4.tgz#647e3f018b5a3245f1feb028ca77155a89528cb4"
-  integrity sha512-g08sY0afLC6u1zfWsS+vhNm90XpPU4bWI9k9qAiqicxXtF0sM+f7CyfXuUXRjeK6cEqeK3GLesygT4BM5kOhTQ==
+"@nimiq/core-web@^1.5.5":
+  version "1.5.5"
+  resolved "https://registry.yarnpkg.com/@nimiq/core-web/-/core-web-1.5.5.tgz#456970f922c283b0e50acc04468f40e7ba1799a7"
+  integrity sha512-csgJ5uaQa2nVP+y/0dDiQky4o5vBW0VbOlW3BCdm/V78+HUQ9tpLGwV5pYcKeB1X9Zc7tn7/Y+Oml5BQQC4PaQ==
 
 "@nimiq/utils@^0.3.3":
   version "0.3.3"
