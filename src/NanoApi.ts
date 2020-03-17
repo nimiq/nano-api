@@ -668,7 +668,7 @@ export class NanoApi {
      * N E W   A P I
      */
 
-    async sendTransaction(tx: PlainTransaction): Promise<PlainTransactionDetails> {
+    async sendTransaction(tx: PlainTransaction | string): Promise<PlainTransactionDetails> {
         await this._consensusEstablished;
         const txDetail = await this._client.sendTransaction(tx);
         return txDetail.toPlain();
