@@ -1,4 +1,5 @@
 import { Utf8Tools } from '@nimiq/utils';
+import { PeerAddress } from '@nimiq/core-web';
 
 interface Config {
     cdn: string,
@@ -89,6 +90,19 @@ export class NanoApi {
     // @ts-ignore 'event' is declared but its value is never read. 'data' is declared but its value is never read.
     fire(event: string, data?: any) {
         throw new Error('The fire() method needs to be overloaded!');
+    }
+
+    async getKnownAddresses() {
+        await this._apiInitialized;
+        const knownAddressInfos = await this._client.network.getAddresses();
+
+        return knownAddressInfos.map((addressInfo) => {
+            return {
+                peerAddress: addressInfo.peerAddress,
+                peerId:  addressInfo.peerId.toBase64(),
+                state: addressInfo.state,
+            };
+        });
     }
 
     async relayTransaction(txObj: TransactionObjectIn): Promise<PlainTransactionDetails> {
@@ -357,6 +371,8 @@ export class NanoApi {
 
         this._client.addHeadChangedListener(this._headChanged.bind(this));
 
+        // @ts-ignore Property '_consensus' does not exist on type 'Client'.
+        (await this._client._consensus).network.addresses.on('added', (peerAddresses: PeerAddress[]) => this._onAddressesAdded(peerAddresses));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
         (await this._client._consensus as Nimiq.PicoConsensus).on('transaction-relayed', (tx: Nimiq.Transaction) => this._transactionRelayed(tx));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
@@ -651,6 +667,10 @@ export class NanoApi {
         // console.log('peers changed:', peerCount);
         this.fire('peer-count', peerCount); // MODERN
         this.fire('nimiq-peer-count', peerCount);
+    }
+
+    async _onAddressesAdded(addresses: PeerAddress[]) {
+        this.fire('addresses-added', addresses);
     }
 
     _importApi() {
