@@ -1,5 +1,4 @@
 import { Utf8Tools } from '@nimiq/utils';
-import { PeerAddress } from '@nimiq/core-web';
 
 interface Config {
     cdn: string,
@@ -372,7 +371,7 @@ export class NanoApi {
         this._client.addHeadChangedListener(this._headChanged.bind(this));
 
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
-        (await this._client._consensus).network.addresses.on('added', (peerAddresses: PeerAddress[]) => this._onAddressesAdded(peerAddresses));
+        (await this._client._consensus).network.addresses.on('added', (peerAddresses: Nimiq.PeerAddress[]) => this._onAddressesAdded(peerAddresses));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
         (await this._client._consensus as Nimiq.PicoConsensus).on('transaction-relayed', (tx: Nimiq.Transaction) => this._transactionRelayed(tx));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
@@ -669,7 +668,7 @@ export class NanoApi {
         this.fire('nimiq-peer-count', peerCount);
     }
 
-    async _onAddressesAdded(addresses: PeerAddress[]) {
+    async _onAddressesAdded(addresses: Nimiq.PeerAddress[]) {
         this.fire('addresses-added', addresses);
     }
 
