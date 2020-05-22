@@ -91,17 +91,10 @@ export class NanoApi {
         throw new Error('The fire() method needs to be overloaded!');
     }
 
-    async getKnownAddresses() {
+    async getPeerAddresses() {
         await this._apiInitialized;
-        const knownAddressInfos = await this._client.network.getAddresses();
-
-        return knownAddressInfos.map((addressInfo) => {
-            return {
-                peerAddress: addressInfo.peerAddress,
-                peerId:  addressInfo.peerId.toBase64(),
-                state: addressInfo.state,
-            };
-        });
+        const peerAddressInfos = await this._client.network.getAddresses();
+        return peerAddressInfos.map(addressInfo => addressInfo.toPlain());
     }
 
     async relayTransaction(txObj: TransactionObjectIn): Promise<PlainTransactionDetails> {
@@ -371,7 +364,7 @@ export class NanoApi {
         this._client.addHeadChangedListener(this._headChanged.bind(this));
 
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
-        (await this._client._consensus).network.addresses.on('added', (peerAddresses: Nimiq.PeerAddress[]) => this._onAddressesAdded(peerAddresses));
+        (await this._client._consensus).network.addresses.on('added', (peerAddresses: Nimiq.PeerAddress[]) => this._onPeerAddressesAdded(peerAddresses));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
         (await this._client._consensus as Nimiq.PicoConsensus).on('transaction-relayed', (tx: Nimiq.Transaction) => this._transactionRelayed(tx));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
@@ -668,8 +661,10 @@ export class NanoApi {
         this.fire('nimiq-peer-count', peerCount);
     }
 
-    async _onAddressesAdded(addresses: Nimiq.PeerAddress[]) {
-        this.fire('addresses-added', addresses);
+    async _onPeerAddressesAdded(peerAddresses: Nimiq.PeerAddress[]) {
+        const peerAddressStates = peerAddresses.map(peerAddress => new Nimiq.PeerAddressState(peerAddress));
+        const plainAddressInfos = peerAddressStates.map(peerAddressState => new Nimiq.Client.AddressInfo(peerAddressState).toPlain());
+        this.fire('peer-addresses-added', plainAddressInfos);
     }
 
     _importApi() {
