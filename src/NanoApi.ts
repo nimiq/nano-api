@@ -364,11 +364,11 @@ export class NanoApi {
         this._client.addHeadChangedListener(this._headChanged.bind(this));
 
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
-        (await this._client._consensus).network.addresses.on('added', (peerAddresses: Nimiq.PeerAddress[]) => this._onPeerAddressesAdded(peerAddresses));
-        // @ts-ignore Property '_consensus' does not exist on type 'Client'.
         (await this._client._consensus as Nimiq.PicoConsensus).on('transaction-relayed', (tx: Nimiq.Transaction) => this._transactionRelayed(tx));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
         (await this._client._consensus as Nimiq.PicoConsensus).network.on('peers-changed', () => this._onPeersChanged());
+        // @ts-ignore Property '_consensus' does not exist on type 'Client'.
+        (await this._client._consensus as Nimiq.PicoConsensus).network.addresses.on('added', (peerAddresses: Nimiq.PeerAddress[]) => this._onPeerAddressesAdded(peerAddresses));
     }
 
     async _headChanged(): Promise<void> {
