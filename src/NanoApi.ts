@@ -91,6 +91,12 @@ export class NanoApi {
         throw new Error('The fire() method needs to be overloaded!');
     }
 
+    async getPeerAddresses() {
+        await this._apiInitialized;
+        const peerAddressInfos = await this._client.network.getAddresses();
+        return peerAddressInfos.map(addressInfo => addressInfo.toPlain());
+    }
+
     async relayTransaction(txObj: TransactionObjectIn): Promise<PlainTransactionDetails> {
         let isTxSent = false;
         let mustWaitBeforeRelay = !this._isConsensusEstablished;
@@ -357,6 +363,8 @@ export class NanoApi {
 
         this._client.addHeadChangedListener(this._headChanged.bind(this));
 
+        // @ts-ignore Property '_consensus' does not exist on type 'Client'.
+        (await this._client._consensus).network.addresses.on('added', (peerAddresses: Nimiq.PeerAddress[]) => this._onPeerAddressesAdded(peerAddresses));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
         (await this._client._consensus as Nimiq.PicoConsensus).on('transaction-relayed', (tx: Nimiq.Transaction) => this._transactionRelayed(tx));
         // @ts-ignore Property '_consensus' does not exist on type 'Client'.
@@ -651,6 +659,12 @@ export class NanoApi {
         // console.log('peers changed:', peerCount);
         this.fire('peer-count', peerCount); // MODERN
         this.fire('nimiq-peer-count', peerCount);
+    }
+
+    async _onPeerAddressesAdded(peerAddresses: Nimiq.PeerAddress[]) {
+        const peerAddressStates = peerAddresses.map(peerAddress => new Nimiq.PeerAddressState(peerAddress));
+        const plainAddressInfos = peerAddressStates.map(peerAddressState => new Nimiq.Client.AddressInfo(peerAddressState).toPlain());
+        this.fire('peer-addresses-added', plainAddressInfos);
     }
 
     _importApi() {
