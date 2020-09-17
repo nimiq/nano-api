@@ -15,6 +15,7 @@ type TransactionObjectIn = {
     validityStartHeight: number | string,
     extraData?: string | Uint8Array,
     flags?: Nimiq.Transaction.Flag,
+    proof?: Uint8Array,
 
     senderPubKey?: Uint8Array,
     signerPublicKey?: Uint8Array,
@@ -634,10 +635,13 @@ export class NanoApi {
             : obj.validityStartHeight;
         const flags = obj.flags || Nimiq.Transaction.Flag.NONE;
         const data = obj.extraData as (Uint8Array | undefined) || new Uint8Array(0);
+        let proof = obj.proof;
 
-        const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
-        const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
-        const proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature);
+        if (!proof) {
+            const senderPubKey = Nimiq.PublicKey.unserialize(new Nimiq.SerialBuffer(obj.senderPubKey || obj.signerPublicKey));
+            const signature = Nimiq.Signature.unserialize(new Nimiq.SerialBuffer(obj.signature));
+            proof = Nimiq.SignatureProof.singleSig(senderPubKey, signature).serialize();
+        }
 
         return new Nimiq.ExtendedTransaction(
             senderAddr,
@@ -649,7 +653,7 @@ export class NanoApi {
             validityStartHeight,
             flags,
             data,
-            proof.serialize(),
+            proof,
         );
     }
 
