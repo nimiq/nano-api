@@ -161,6 +161,14 @@ export class NanoApi {
         return true;
     }
 
+    async addTransactionListener(eventName: string, addresses: string[]): Promise<true> {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+        await this._apiInitialized;
+        const listener = (tx: Nimiq.Client.TransactionDetails) => this.fire(eventName, tx.toPlain());
+        this._client.addTransactionListener(listener, addresses);
+        return true;
+    }
+
     async getBalance(addresses: string | string[]): Promise<Balances> {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
