@@ -173,6 +173,15 @@ export class NanoApi {
         return this._client.removeListener(handle);
     }
 
+    async getAccounts(
+        addresses: string | string[],
+    ): Promise<Array<ReturnType<Nimiq.Account["toPlain"]> & {address: string}>> {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+        const accounts = await this._getAccounts(addresses);
+
+        return accounts.map((account, i) => Object.assign(account.toPlain(), { address: addresses[i] }));
+    }
+
     async getBalance(addresses: string | string[]): Promise<Balances> {
         if (!(addresses instanceof Array)) addresses = [addresses];
 
@@ -422,7 +431,7 @@ export class NanoApi {
         balances: Balances,
         compat: Balances,
     }> {
-        let accounts = await this._getAccounts(addresses);
+        const accounts = await this._getAccounts(addresses);
 
         const balances: Balances = new Map();
         const compatBalances: Balances = new Map();
