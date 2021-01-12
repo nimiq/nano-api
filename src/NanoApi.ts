@@ -168,6 +168,12 @@ export class NanoApi {
         return this._client.addTransactionListener(listener, addresses);
     }
 
+    async addConsensusChangedListener(eventName: string): Promise<number> {
+        await this._apiInitialized;
+        const listener = (consensusState: Nimiq.Client.ConsensusState) => this.fire(eventName, consensusState);
+        return this._client.addConsensusChangedListener(listener);
+    }
+
     async removeListener(handle: number): Promise<void> {
         await this._apiInitialized;
         return this._client.removeListener(handle);
