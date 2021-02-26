@@ -63,7 +63,7 @@ export class NanoApi {
     private _balances: Balances = new Map<string, number>(); // Balances in Luna, excluding pending txs
     private _compatBalances: Balances = new Map<string, number>(); // Balances in NIM, including pending txs
     private _knownHead: Nimiq.BlockHeader | null = null;
-    private _client!: Nimiq.Client;
+    protected _client!: Nimiq.Client;
 
     constructor(config: Config) {
         this._config = config;
