@@ -161,6 +161,15 @@ export class NanoApi {
         return true;
     }
 
+    async forgetBalances(addresses: string | string[]): Promise<true> {
+        if (!(addresses instanceof Array)) addresses = [addresses];
+        for (const address of addresses) {
+            this._balances.delete(address);
+            this._compatBalances.delete(address);
+        }
+        return true;
+    }
+
     async addTransactionListener(eventName: string, addresses: string[]): Promise<number> {
         if (!(addresses instanceof Array)) addresses = [addresses];
         await this._apiInitialized;
