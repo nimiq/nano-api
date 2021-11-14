@@ -57,7 +57,7 @@ export class NanoApi {
     private _config: Config;
     private _consensusEstablished!: Promise<boolean>;
     private _apiInitialized: Promise<boolean>;
-    private _consensusEstablishedResolver!: () => any;
+    private _consensusEstablishedResolver!: (value: boolean) => any;
     private _isConsensusEstablished = false;
     private _selfRelayedTransactionHashes = new Set<string>();
     private _balances: Balances = new Map<string, number>(); // Balances in Luna, excluding pending txs
@@ -72,14 +72,14 @@ export class NanoApi {
             try {
                 await Nimiq.load();
             } catch (e) {
-                console.error('Nimiq API could not be initialized:', e.message || e);
-                this.fire('nimiq-api-fail', e.message || e);
+                console.error('Nimiq API could not be initialized:', (e as Error).message || e);
+                this.fire('nimiq-api-fail', (e as Error).message || e);
                 return; // Do not resolve promise
             }
             // setTimeout(resolve, 500);
             // console.log('Nimiq API ready to use');
             this.fire('nimiq-api-ready');
-            resolve();
+            resolve(true);
         });
 
         this._createConsensusPromise();
@@ -391,7 +391,7 @@ export class NanoApi {
                     break;
                 case Nimiq.Client.ConsensusState.ESTABLISHED:
                     this._isConsensusEstablished = true;
-                    this._consensusEstablishedResolver();
+                    this._consensusEstablishedResolver(true);
                     console.log('Consensus established');
                     this.fire('nimiq-consensus-established');
                     break;
