@@ -53,6 +53,12 @@ type PlainVestingContract = ReturnType<Nimiq.VestingContract["toPlain"]> & {
 
 type Balances = Map<string, number>;
 
+declare module "@nimiq/core-web" {
+    interface Client {
+        _consensus: Promise<BaseConsensus>;
+    }
+}
+
 export class NanoApi {
     private _config: Config;
     private _consensusEstablished!: Promise<boolean>;
@@ -139,18 +145,26 @@ export class NanoApi {
     async connect(): Promise<Nimiq.Client | undefined> {
         await this._apiInitialized;
 
-        try {
-            Nimiq.GenesisConfig[this._config.network]();
-        } catch (e) {
-            console.warn('Already connected');
-            return;
+        if (!this.client) {
+            try {
+                Nimiq.GenesisConfig[this._config.network]();
+            } catch (e) { }
+
+            this.client = Nimiq.Client.Configuration.builder().volatile().instantiateClient();
+
+            this._bindEventListeners();
+        } else {
+            const consensus = await this.client._consensus;
+            consensus.network.connect();
         }
 
-        this.client = Nimiq.Client.Configuration.builder().volatile().instantiateClient();
-
-        this._bindEventListeners();
-
         return this.client;
+    }
+
+    async disconnect(reason?: string) {
+        await this._apiInitialized;
+        const consensus = await this.client._consensus;
+        consensus.network.disconnect(reason);
     }
 
     async subscribe(addresses: string | string[]): Promise<true> {
