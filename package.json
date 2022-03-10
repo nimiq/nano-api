@@ -1,6 +1,6 @@
 {
   "name": "@nimiq/nano-api",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Nano Network API",
   "module": "dist/NanoApi.es.js",
   "repository": "git@github.com:nimiq/nano-api.git",
